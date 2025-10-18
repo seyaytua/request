@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "訂正依頼システム"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -48,7 +48,7 @@ REQUEST_STATUS = {
 
 ATTENDANCE_TYPES = ["出席", "欠席", "遅刻", "早退", "公欠"]
 GRADE_TYPES = ["A", "B", "C", "D", "F"]
-SEMESTER_TYPES = ["1学期", "2学期", "3学期", "前期中間", "前期期末", "後期中間", "仮評定", "後期期末", "評定"]
+SEMESTER_TYPES = ["前期中間", "前期期末", "後期中間", "仮評定", "後期期末", "評定"]
 PERIOD_TYPES = [f"{i}限" for i in range(1, 13)]
 
 COLOR_ATTENDANCE = "#E8F5E9"

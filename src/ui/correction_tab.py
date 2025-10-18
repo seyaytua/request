@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from .widgets.correction_list_widget import CorrectionListWidget
 from .widgets.correction_input_widget import CorrectionInputWidget
 from .dialogs.confirmation_dialog import ConfirmationDialog
+from .dialogs.edit_dialog import EditDialog
 from ..controllers.correction_controller import CorrectionController
 from ..utils.logger import get_logger
 
@@ -31,13 +32,11 @@ class CorrectionTab(QWidget):
         
         splitter = QSplitter(Qt.Horizontal)
         
-        # 左側: 訂正依頼リスト
         self.list_widget = CorrectionListWidget()
         self.list_widget.refresh_requested.connect(self.refresh_list)
         self.list_widget.edit_requested.connect(self.on_edit_correction)
         self.list_widget.delete_requested.connect(self.on_delete_correction)
         
-        # 右側: 訂正入力フォーム
         self.input_widget = CorrectionInputWidget()
         self.input_widget.submit_requested.connect(self.on_submit_corrections)
         
@@ -129,9 +128,27 @@ class CorrectionTab(QWidget):
                 QMessageBox.warning(self, "エラー", "訂正依頼が見つかりません")
                 return
             
-            # TODO: 編集ダイアログを実装
-            QMessageBox.information(self, "編集", 
-                f"訂正依頼 ID:{correction_id} の編集機能は今後実装予定です")
+            if correction['is_locked']:
+                QMessageBox.warning(self, "エラー", 
+                    "ロックされた訂正依頼は編集できません")
+                return
+            
+            students = self.controller.get_students(year=2024)
+            courses = self.controller.get_courses(year=2024)
+            
+            dialog = EditDialog(correction, students, courses, self)
+            result = dialog.exec()
+            
+            if result == EditDialog.Accepted:
+                update_data = dialog.get_data()
+                
+                success = self.controller.update_correction(correction_id, update_data)
+                
+                if success:
+                    QMessageBox.information(self, "完了", "訂正依頼を更新しました")
+                    self.refresh_list()
+                else:
+                    QMessageBox.warning(self, "失敗", "訂正依頼の更新に失敗しました")
             
         except Exception as e:
             logger.error(f"訂正依頼の編集に失敗: {e}")
@@ -140,14 +157,24 @@ class CorrectionTab(QWidget):
     
     def on_delete_correction(self, correction_id: int):
         """訂正依頼を削除"""
-        reply = QMessageBox.question(
-            self, "確認", 
-            f"訂正依頼 ID:{correction_id} を削除しますか？",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            try:
+        try:
+            correction = self.controller.get_correction(correction_id)
+            if not correction:
+                QMessageBox.warning(self, "エラー", "訂正依頼が見つかりません")
+                return
+            
+            if correction['is_locked']:
+                QMessageBox.warning(self, "エラー", 
+                    "ロックされた訂正依頼は削除できません")
+                return
+            
+            reply = QMessageBox.question(
+                self, "確認", 
+                f"訂正依頼 ID:{correction_id} を削除しますか？",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
                 success = self.controller.delete_correction(correction_id)
                 
                 if success:
@@ -156,7 +183,7 @@ class CorrectionTab(QWidget):
                 else:
                     QMessageBox.warning(self, "失敗", "訂正依頼の削除に失敗しました")
                     
-            except Exception as e:
-                logger.error(f"訂正依頼の削除に失敗: {e}")
-                QMessageBox.critical(self, "エラー", 
-                    f"訂正依頼の削除に失敗しました:\n{e}")
+        except Exception as e:
+            logger.error(f"訂正依頼の削除に失敗: {e}")
+            QMessageBox.critical(self, "エラー", 
+                f"訂正依頼の削除に失敗しました:\n{e}")
