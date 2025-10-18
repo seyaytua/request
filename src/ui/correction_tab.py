@@ -1,16 +1,17 @@
 """
-訂正入力タブ
+訂正入力タブ v1.4.0
 左65%にリスト、右35%に入力フォーム
 """
+import csv
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QSplitter, QMessageBox
+    QWidget, QHBoxLayout, QSplitter, QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt
 
 from .widgets.correction_list_widget import CorrectionListWidget
 from .widgets.correction_input_widget import CorrectionInputWidget
 from .dialogs.confirmation_dialog import ConfirmationDialog
-from .dialogs.edit_dialog import EditDialog
+from .dialogs.view_dialog import ViewDialog
 from ..controllers.correction_controller import CorrectionController
 from ..utils.logger import get_logger
 
@@ -34,8 +35,9 @@ class CorrectionTab(QWidget):
         
         self.list_widget = CorrectionListWidget()
         self.list_widget.refresh_requested.connect(self.refresh_list)
-        self.list_widget.edit_requested.connect(self.on_edit_correction)
+        self.list_widget.view_requested.connect(self.on_view_correction)
         self.list_widget.delete_requested.connect(self.on_delete_correction)
+        self.list_widget.export_requested.connect(self.on_export_corrections)
         
         self.input_widget = CorrectionInputWidget()
         self.input_widget.submit_requested.connect(self.on_submit_corrections)
@@ -120,26 +122,21 @@ class CorrectionTab(QWidget):
             self.refresh_list()
             self.input_widget.clear_all()
     
-    def on_edit_correction(self, correction_id: int):
-        """訂正依頼を編集"""
+    def on_view_correction(self, correction_id: int):
+        """訂正依頼を表示/編集"""
         try:
             correction = self.controller.get_correction(correction_id)
             if not correction:
                 QMessageBox.warning(self, "エラー", "訂正依頼が見つかりません")
                 return
             
-            if correction['is_locked']:
-                QMessageBox.warning(self, "エラー", 
-                    "ロックされた訂正依頼は編集できません")
-                return
-            
             students = self.controller.get_students(year=2024)
             courses = self.controller.get_courses(year=2024)
             
-            dialog = EditDialog(correction, students, courses, self)
+            dialog = ViewDialog(correction, students, courses, self)
             result = dialog.exec()
             
-            if result == EditDialog.Accepted:
+            if result == ViewDialog.Accepted and not correction['is_locked']:
                 update_data = dialog.get_data()
                 
                 success = self.controller.update_correction(correction_id, update_data)
@@ -151,9 +148,9 @@ class CorrectionTab(QWidget):
                     QMessageBox.warning(self, "失敗", "訂正依頼の更新に失敗しました")
             
         except Exception as e:
-            logger.error(f"訂正依頼の編集に失敗: {e}")
+            logger.error(f"訂正依頼の表示に失敗: {e}")
             QMessageBox.critical(self, "エラー", 
-                f"訂正依頼の編集に失敗しました:\n{e}")
+                f"訂正依頼の表示に失敗しました:\n{e}")
     
     def on_delete_correction(self, correction_id: int):
         """訂正依頼を削除"""
@@ -187,3 +184,52 @@ class CorrectionTab(QWidget):
             logger.error(f"訂正依頼の削除に失敗: {e}")
             QMessageBox.critical(self, "エラー", 
                 f"訂正依頼の削除に失敗しました:\n{e}")
+    
+    def on_export_corrections(self):
+        """訂正依頼をCSVエクスポート"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "訂正依頼CSVエクスポート", "", "CSV Files (*.csv)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            corrections = self.controller.get_corrections(limit=10000)
+            
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                
+                writer.writerow([
+                    'ID', '種別', '生徒名', '組番号', '講座名', '対象日付', 
+                    '学期', '校時', '訂正前', '訂正後', '理由', '依頼者', 
+                    'ロック', 'ロック者', '依頼日時'
+                ])
+                
+                for c in corrections:
+                    writer.writerow([
+                        c['correction_id'],
+                        c['request_type'],
+                        c.get('student_name', ''),
+                        c.get('class_number', ''),
+                        c.get('course_name', ''),
+                        c.get('target_date', ''),
+                        c.get('semester', ''),
+                        c.get('periods', ''),
+                        c.get('before_value', ''),
+                        c.get('after_value', ''),
+                        c.get('reason', ''),
+                        c.get('requester_name', ''),
+                        '○' if c['is_locked'] else '',
+                        c.get('locked_by', ''),
+                        c.get('request_datetime', '')
+                    ])
+            
+            QMessageBox.information(self, "完了", 
+                f"{len(corrections)}件のデータをエクスポートしました\n{file_path}")
+            logger.info(f"訂正依頼CSVエクスポート完了: {file_path}")
+            
+        except Exception as e:
+            logger.error(f"訂正依頼CSVエクスポートに失敗: {e}")
+            QMessageBox.critical(self, "エラー", 
+                f"訂正依頼CSVエクスポートに失敗しました:\n{e}")

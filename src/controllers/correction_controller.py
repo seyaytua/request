@@ -1,5 +1,5 @@
 """
-訂正依頼コントローラー
+訂正依頼コントローラー v1.4.0
 訂正依頼のCRUD操作とビジネスロジックを管理
 """
 from typing import Dict, Any, List, Optional
@@ -9,7 +9,6 @@ from ..database.db_manager import DatabaseManager
 from ..controllers.log_controller import LogController
 from ..utils.system_info import get_username, get_pc_name
 from ..utils.logger import get_logger
-from ..config import REQUEST_STATUS
 
 logger = get_logger(__name__)
 
@@ -108,7 +107,6 @@ class CorrectionController:
     
     def get_corrections(
         self,
-        status: Optional[str] = None,
         request_type: Optional[str] = None,
         is_locked: Optional[bool] = None,
         limit: int = 100,
@@ -118,7 +116,6 @@ class CorrectionController:
         訂正依頼一覧を取得
         
         Args:
-            status: ステータスでフィルタ
             request_type: 依頼種別でフィルタ
             is_locked: ロック状態でフィルタ
             limit: 取得件数
@@ -136,10 +133,6 @@ class CorrectionController:
             WHERE cr.is_deleted = 0
         """
         params = []
-        
-        if status:
-            query += " AND cr.status = ?"
-            params.append(status)
         
         if request_type:
             query += " AND cr.request_type = ?"
@@ -184,7 +177,7 @@ class CorrectionController:
         
         for key, value in update_data.items():
             if key in ['request_type', 'target_date', 'semester', 'periods',
-                      'before_value', 'after_value', 'reason', 'status']:
+                      'before_value', 'after_value', 'reason']:
                 set_clauses.append(f"{key} = ?")
                 params.append(value)
         

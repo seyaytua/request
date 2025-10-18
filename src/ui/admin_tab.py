@@ -1,6 +1,5 @@
 """
-システム部管理タブ
-ロック管理、インポート/エクスポート、ログビューア、マスタ管理
+システム部管理タブ v1.4.0
 """
 import csv
 from pathlib import Path
@@ -41,25 +40,25 @@ class AdminTab(QWidget):
         layout = QVBoxLayout()
         
         # タブウィジェット
-        tabs = QTabWidget()
+        self.tabs = QTabWidget()
         
         # 訂正依頼管理タブ
         correction_widget = self._create_correction_tab()
-        tabs.addTab(correction_widget, "📝 訂正依頼管理")
+        self.tabs.addTab(correction_widget, "📝 訂正依頼管理")
         
         # 生徒情報管理タブ
         student_widget = self._create_student_tab()
-        tabs.addTab(student_widget, "👨‍🎓 生徒情報管理")
+        self.tabs.addTab(student_widget, "👨‍🎓 生徒情報管理")
         
         # 講座情報管理タブ
         course_widget = self._create_course_tab()
-        tabs.addTab(course_widget, "📚 講座情報管理")
+        self.tabs.addTab(course_widget, "📚 講座情報管理")
         
         # 操作ログタブ
         log_widget = self._create_log_tab()
-        tabs.addTab(log_widget, "📊 操作ログ")
+        self.tabs.addTab(log_widget, "📊 操作ログ")
         
-        layout.addWidget(tabs)
+        layout.addWidget(self.tabs)
         self.setLayout(layout)
     
     def _create_correction_tab(self):
@@ -105,7 +104,7 @@ class AdminTab(QWidget):
         button_layout.addStretch()
         correction_layout.addLayout(button_layout)
         
-        # 訂正依頼リスト（詳細表示）
+        # 訂正依頼リスト
         self.correction_table = QTableWidget()
         self.correction_table.setColumnCount(13)
         self.correction_table.setHorizontalHeaderLabels([

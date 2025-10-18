@@ -1,12 +1,12 @@
 """
-設定ファイル
+設定ファイル v1.4.0
 """
 import os
 import sys
 from pathlib import Path
 
 APP_NAME = "訂正依頼システム"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -23,6 +23,7 @@ STYLES_DIR = RESOURCES_DIR / "styles"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_ADMIN_PASSWORD = "admin123"
+DEFAULT_NOTICE_MESSAGE = "成績の訂正の場合は、教務に報告してからこちらの訂正依頼を申請してください。訂正依頼後は、成績入力シートなどのデータも忘れずに修正しておいてください。"
 
 WINDOW_WIDTH = 1400
 WINDOW_HEIGHT = 800
@@ -37,13 +38,6 @@ DB_WAL_MODE = True
 REQUEST_TYPES = {
     "ATTENDANCE": "出欠訂正",
     "GRADE": "評価評定変更"
-}
-
-REQUEST_STATUS = {
-    "PENDING": "未処理",
-    "PROCESSING": "処理中",
-    "COMPLETED": "完了",
-    "REJECTED": "却下"
 }
 
 ATTENDANCE_TYPES = ["出席", "欠席", "遅刻", "早退", "公欠"]
