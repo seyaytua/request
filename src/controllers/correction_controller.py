@@ -1,6 +1,5 @@
 """
-訂正依頼コントローラー v1.4.0
-訂正依頼のCRUD操作とビジネスロジックを管理
+訂正依頼コントローラー v1.5.0
 """
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -17,36 +16,11 @@ class CorrectionController:
     """訂正依頼を管理するコントローラー"""
     
     def __init__(self, db: DatabaseManager, log_controller: LogController):
-        """
-        初期化
-        
-        Args:
-            db: DatabaseManagerインスタンス
-            log_controller: LogControllerインスタンス
-        """
         self.db = db
         self.log_controller = log_controller
     
     def create_correction(self, correction_data: Dict[str, Any]) -> int:
-        """
-        訂正依頼を作成
-        
-        Args:
-            correction_data: 訂正依頼データ
-                - request_type: 依頼種別
-                - student_id: 生徒ID
-                - course_id: 講座ID
-                - target_date: 対象日付（出欠訂正の場合）
-                - semester: 学期（評価評定変更の場合）
-                - periods: 校時（出欠訂正の場合、カンマ区切り）
-                - before_value: 訂正前
-                - after_value: 訂正後
-                - reason: 理由
-                - requester: 依頼者
-                
-        Returns:
-            作成された訂正依頼ID
-        """
+        """訂正依頼を作成"""
         pc_name = get_pc_name()
         
         correction_id = self.db.execute_insert(
@@ -71,11 +45,10 @@ class CorrectionController:
             )
         )
         
-        # ログ記録
         self.log_controller.log_operation(
             operation_type='作成',
             target_table='correction_requests',
-            target_record_id=correction_id,
+            target_record_id=str(correction_id),
             after_data=correction_data,
             detail=f"訂正依頼を作成: {correction_data['request_type']} by {correction_data['requester']}"
         )
@@ -84,18 +57,11 @@ class CorrectionController:
         return correction_id
     
     def get_correction(self, correction_id: int) -> Optional[Dict[str, Any]]:
-        """
-        訂正依頼を取得
-        
-        Args:
-            correction_id: 訂正依頼ID
-            
-        Returns:
-            訂正依頼データ
-        """
+        """訂正依頼を取得"""
         rows = self.db.execute_query(
             """
-            SELECT cr.*, s.name as student_name, s.class_number, c.course_name
+            SELECT cr.*, s.name as student_name, s.class_number, s.name_kana,
+                   c.course_name, c.teacher_name
             FROM correction_requests cr
             LEFT JOIN students s ON cr.student_id = s.student_id
             LEFT JOIN courses c ON cr.course_id = c.course_id
@@ -109,6 +75,7 @@ class CorrectionController:
         self,
         request_type: Optional[str] = None,
         is_locked: Optional[bool] = None,
+        search: Optional[str] = None,
         limit: int = 100,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
@@ -118,14 +85,12 @@ class CorrectionController:
         Args:
             request_type: 依頼種別でフィルタ
             is_locked: ロック状態でフィルタ
+            search: 検索文字列（生徒名、ひらがなで検索）
             limit: 取得件数
             offset: オフセット
-            
-        Returns:
-            訂正依頼のリスト
         """
         query = """
-            SELECT cr.*, s.name as student_name, s.class_number,
+            SELECT cr.*, s.name as student_name, s.class_number, s.name_kana,
                    c.course_name, c.teacher_name
             FROM correction_requests cr
             LEFT JOIN students s ON cr.student_id = s.student_id
@@ -142,27 +107,19 @@ class CorrectionController:
             query += " AND cr.is_locked = ?"
             params.append(1 if is_locked else 0)
         
+        if search:
+            query += " AND (s.name LIKE ? OR s.name_kana LIKE ?)"
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern])
+        
         query += " ORDER BY cr.request_datetime DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         
         rows = self.db.execute_query(query, tuple(params))
         return self.db.rows_to_dicts(rows)
     
-    def update_correction(
-        self,
-        correction_id: int,
-        update_data: Dict[str, Any]
-    ) -> bool:
-        """
-        訂正依頼を更新
-        
-        Args:
-            correction_id: 訂正依頼ID
-            update_data: 更新データ
-            
-        Returns:
-            更新成功したらTrue
-        """
+    def update_correction(self, correction_id: int, update_data: Dict[str, Any]) -> bool:
+        """訂正依頼を更新"""
         before_data = self.get_correction(correction_id)
         if not before_data:
             logger.error(f"訂正依頼が見つかりません: ID={correction_id}")
@@ -200,7 +157,7 @@ class CorrectionController:
             self.log_controller.log_operation(
                 operation_type='更新',
                 target_table='correction_requests',
-                target_record_id=correction_id,
+                target_record_id=str(correction_id),
                 before_data=before_data,
                 after_data=update_data,
                 detail="訂正依頼を更新"
@@ -211,15 +168,7 @@ class CorrectionController:
         return False
     
     def delete_correction(self, correction_id: int) -> bool:
-        """
-        訂正依頼を削除（論理削除）
-        
-        Args:
-            correction_id: 訂正依頼ID
-            
-        Returns:
-            削除成功したらTrue
-        """
+        """訂正依頼を削除（論理削除）"""
         before_data = self.get_correction(correction_id)
         if not before_data:
             logger.error(f"訂正依頼が見つかりません: ID={correction_id}")
@@ -239,12 +188,13 @@ class CorrectionController:
         )
         
         if affected > 0:
+            # 削除されたデータの詳細をログに記録
             self.log_controller.log_operation(
                 operation_type='削除',
                 target_table='correction_requests',
-                target_record_id=correction_id,
+                target_record_id=str(correction_id),
                 before_data=before_data,
-                detail="訂正依頼を削除"
+                detail=f"訂正依頼を削除: {before_data['request_type']} - {before_data.get('student_name', '')}"
             )
             logger.info(f"訂正依頼を削除しました: ID={correction_id}")
             return True
@@ -252,15 +202,7 @@ class CorrectionController:
         return False
     
     def lock_correction(self, correction_id: int) -> bool:
-        """
-        訂正依頼をロック
-        
-        Args:
-            correction_id: 訂正依頼ID
-            
-        Returns:
-            ロック成功したらTrue
-        """
+        """訂正依頼をロック"""
         username = get_username()
         
         affected = self.db.execute_update(
@@ -277,7 +219,7 @@ class CorrectionController:
             self.log_controller.log_operation(
                 operation_type='ロック',
                 target_table='correction_requests',
-                target_record_id=correction_id,
+                target_record_id=str(correction_id),
                 detail=f"訂正依頼をロック by {username}"
             )
             logger.info(f"訂正依頼をロックしました: ID={correction_id}")
@@ -286,15 +228,7 @@ class CorrectionController:
         return False
     
     def unlock_correction(self, correction_id: int) -> bool:
-        """
-        訂正依頼のロックを解除
-        
-        Args:
-            correction_id: 訂正依頼ID
-            
-        Returns:
-            ロック解除成功したらTrue
-        """
+        """訂正依頼のロックを解除"""
         username = get_username()
         
         affected = self.db.execute_update(
@@ -311,7 +245,7 @@ class CorrectionController:
             self.log_controller.log_operation(
                 operation_type='ロック解除',
                 target_table='correction_requests',
-                target_record_id=correction_id,
+                target_record_id=str(correction_id),
                 detail=f"訂正依頼のロックを解除 by {username}"
             )
             logger.info(f"訂正依頼のロックを解除しました: ID={correction_id}")
@@ -319,8 +253,8 @@ class CorrectionController:
         
         return False
     
-    def get_students(self, year: Optional[int] = None) -> List[Dict[str, Any]]:
-        """生徒一覧を取得"""
+    def get_students(self, year: Optional[int] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        """生徒一覧を取得（検索対応）"""
         query = "SELECT * FROM students WHERE 1=1"
         params = []
         
@@ -328,7 +262,12 @@ class CorrectionController:
             query += " AND year = ?"
             params.append(year)
         
-        query += " ORDER BY year DESC, class_number, student_number"
+        if search:
+            query += " AND (name LIKE ? OR name_kana LIKE ?)"
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern])
+        
+        query += " ORDER BY year DESC, class_number"
         
         rows = self.db.execute_query(query, tuple(params) if params else None)
         return self.db.rows_to_dicts(rows)

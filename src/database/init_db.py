@@ -1,10 +1,10 @@
 """
-データベース初期化スクリプト
+データベース初期化スクリプト v1.5.0
 テーブル作成と初期データ投入
 """
 from pathlib import Path
 from .db_manager import DatabaseManager
-from ..config import DB_PATH, DEFAULT_ADMIN_PASSWORD
+from ..config import DB_PATH, DEFAULT_ADMIN_PASSWORD, DEFAULT_NOTICE_MESSAGE, DEFAULT_BACKUP_INTERVAL
 from ..utils.password_hash import hash_password
 from ..utils.logger import get_logger
 
@@ -46,16 +46,35 @@ def _insert_initial_data(db: DatabaseManager):
     admin_password_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
     
     try:
-        db.execute_insert(
-            """
-            INSERT INTO system_settings (setting_key, setting_value)
-            VALUES (?, ?)
-            """,
-            ('admin_password_hash', admin_password_hash)
+        # 既存の設定を確認
+        existing = db.execute_query(
+            "SELECT setting_key FROM system_settings WHERE setting_key = 'admin_password_hash'"
         )
-        logger.info(f"初期管理者パスワードを設定しました（パスワード: {DEFAULT_ADMIN_PASSWORD}）")
+        
+        if not existing:
+            # 初期設定を挿入
+            settings = [
+                ('admin_password_hash', admin_password_hash),
+                ('app_version', '1.5.0'),
+                ('db_version', '1.5'),
+                ('app_title', '訂正依頼システム'),
+                ('notice_message', DEFAULT_NOTICE_MESSAGE),
+                ('backup_interval', str(DEFAULT_BACKUP_INTERVAL)),
+                ('launch_count', '0')
+            ]
+            
+            for key, value in settings:
+                db.execute_insert(
+                    "INSERT OR IGNORE INTO system_settings (setting_key, setting_value) VALUES (?, ?)",
+                    (key, value)
+                )
+            
+            logger.info(f"初期管理者パスワードを設定しました（パスワード: {DEFAULT_ADMIN_PASSWORD}）")
+        else:
+            logger.info("システム設定は既に存在します")
+    
     except Exception as e:
-        logger.debug(f"初期データは既に存在します: {e}")
+        logger.error(f"初期データ投入エラー: {e}")
     
     _insert_sample_data(db)
 
@@ -63,24 +82,24 @@ def _insert_initial_data(db: DatabaseManager):
 def _insert_sample_data(db: DatabaseManager):
     """サンプルデータを投入（開発・テスト用）"""
     try:
-        # サンプル生徒データ（組番号を5文字に変更）
+        # サンプル生徒データ（新しいID構造）
         sample_students = [
-            (2024, "F1221", "01", "山田太郎", "やまだたろう"),
-            (2024, "F1221", "02", "佐藤花子", "さとうはなこ"),
-            (2024, "J2123", "01", "鈴木一郎", "すずきいちろう"),
+            ("2024-F1221", 2024, "F1221", "1234567", "山田太郎", "やまだたろう"),
+            ("2024-F1222", 2024, "F1222", "1234568", "佐藤花子", "さとうはなこ"),
+            ("2024-J2123", 2024, "J2123", "1234569", "鈴木一郎", "すずきいちろう"),
         ]
         
         for student in sample_students:
             db.execute_insert(
                 """
                 INSERT OR IGNORE INTO students 
-                (year, class_number, student_number, name, name_kana)
-                VALUES (?, ?, ?, ?, ?)
+                (student_id, year, class_number, student_number, name, name_kana)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 student
             )
         
-        # サンプル講座データ（学期を文字列に変更）
+        # サンプル講座データ（新しいID構造）
         sample_courses = [
             ("2024-MATH-01", "数学I", "田中先生", 2024, "前期中間", "MATH"),
             ("2024-ENG-01", "英語I", "佐々木先生", 2024, "前期期末", "ENG"),

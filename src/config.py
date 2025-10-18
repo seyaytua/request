@@ -1,12 +1,12 @@
 """
-設定ファイル v1.4.0
+設定ファイル v1.5.0
 """
 import os
 import sys
 from pathlib import Path
 
 APP_NAME = "訂正依頼システム"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
@@ -16,14 +16,17 @@ else:
     DATA_DIR = BASE_DIR / "data"
 
 DB_PATH = DATA_DIR / "corrections.db"
+BACKUP_DIR = DATA_DIR / "backups"
 RESOURCES_DIR = BASE_DIR / "src" / "resources"
 ICONS_DIR = RESOURCES_DIR / "icons"
 STYLES_DIR = RESOURCES_DIR / "styles"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_ADMIN_PASSWORD = "admin123"
 DEFAULT_NOTICE_MESSAGE = "成績の訂正の場合は、教務に報告してからこちらの訂正依頼を申請してください。訂正依頼後は、成績入力シートなどのデータも忘れずに修正しておいてください。"
+DEFAULT_BACKUP_INTERVAL = 5  # 起動5回ごとにバックアップ
 
 WINDOW_WIDTH = 1400
 WINDOW_HEIGHT = 800

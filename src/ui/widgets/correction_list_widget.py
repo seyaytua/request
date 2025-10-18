@@ -1,15 +1,15 @@
 """
-訂正依頼リストウィジェット v1.4.0
+訂正依頼リストウィジェット v1.5.0
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
-    QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QLineEdit, QComboBox, QPushButton, QLabel
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QAbstractItemView, QLineEdit, QComboBox, QLabel
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 
-from ...config import REQUEST_TYPES, COLOR_ATTENDANCE, COLOR_GRADE
+from ...config import COLOR_ATTENDANCE, COLOR_GRADE
 from ...utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,48 +32,45 @@ class CorrectionListWidget(QWidget):
         """UIをセットアップ"""
         layout = QVBoxLayout()
         
-        # フィルタエリア
+        # 検索・フィルタエリア
         filter_layout = QHBoxLayout()
         
-        # 検索ボックス
         filter_layout.addWidget(QLabel("検索:"))
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("生徒名、講座名で検索...")
-        self.search_edit.textChanged.connect(self.filter_corrections)
+        self.search_edit.setPlaceholderText("生徒名（ひらがな可）・講座名で検索...")
+        self.search_edit.textChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.search_edit)
         
-        # 種別フィルタ
         filter_layout.addWidget(QLabel("種別:"))
         self.type_combo = QComboBox()
-        self.type_combo.addItem("全て", None)
-        for type_name in REQUEST_TYPES.values():
-            self.type_combo.addItem(type_name, type_name)
-        self.type_combo.currentIndexChanged.connect(self.filter_corrections)
+        self.type_combo.addItems(["全て", "出欠訂正", "評価評定変更"])
+        self.type_combo.currentTextChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.type_combo)
         
-        # ロックフィルタ
         filter_layout.addWidget(QLabel("ロック:"))
         self.lock_combo = QComboBox()
-        self.lock_combo.addItem("全て", None)
-        self.lock_combo.addItem("ロック済み", True)
-        self.lock_combo.addItem("未ロック", False)
-        self.lock_combo.currentIndexChanged.connect(self.filter_corrections)
+        self.lock_combo.addItems(["全て", "ロック済み", "未ロック"])
+        self.lock_combo.currentTextChanged.connect(self.apply_filters)
         filter_layout.addWidget(self.lock_combo)
         
         layout.addLayout(filter_layout)
         
         # テーブル
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "ID", "種別", "生徒名", "組番号", "講座名", 
-            "訂正内容", "理由", "依頼者", "ロック"
+            "ID", "種別", "生徒名", "講座名", "日時・学期", "訂正内容", "ロック"
         ])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)
+        for i in range(7):
+            if i == 5:
+                header.setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
         
         layout.addWidget(self.table)
         
@@ -92,7 +89,7 @@ class CorrectionListWidget(QWidget):
         delete_btn.clicked.connect(self.on_delete_clicked)
         button_layout.addWidget(delete_btn)
         
-        export_btn = QPushButton("📤 エクスポート")
+        export_btn = QPushButton("📤 CSV出力")
         export_btn.clicked.connect(self.export_requested.emit)
         button_layout.addWidget(export_btn)
         
@@ -104,82 +101,93 @@ class CorrectionListWidget(QWidget):
     def load_corrections(self, corrections: list):
         """訂正依頼をロード"""
         self.corrections = corrections
-        self.filter_corrections()
+        self.apply_filters()
     
-    def filter_corrections(self):
+    def apply_filters(self):
         """フィルタを適用"""
         search_text = self.search_edit.text().lower()
-        request_type = self.type_combo.currentData()
-        is_locked = self.lock_combo.currentData()
+        type_filter = self.type_combo.currentText()
+        lock_filter = self.lock_combo.currentText()
         
-        self.table.setRowCount(0)
-        
+        filtered = []
         for correction in self.corrections:
-            # フィルタ条件チェック
-            if request_type and correction['request_type'] != request_type:
+            # 種別フィルタ
+            if type_filter != "全て" and correction['request_type'] != type_filter:
                 continue
             
-            if is_locked is not None and correction['is_locked'] != is_locked:
+            # ロックフィルタ
+            if lock_filter == "ロック済み" and not correction['is_locked']:
+                continue
+            if lock_filter == "未ロック" and correction['is_locked']:
                 continue
             
+            # 検索フィルタ（生徒名・ふりがな・講座名）
             if search_text:
                 student_name = correction.get('student_name', '').lower()
+                student_kana = correction.get('name_kana', '').lower()
                 course_name = correction.get('course_name', '').lower()
-                if search_text not in student_name and search_text not in course_name:
+                
+                if (search_text not in student_name and 
+                    search_text not in student_kana and 
+                    search_text not in course_name):
                     continue
             
-            # テーブルに追加
+            filtered.append(correction)
+        
+        self.display_corrections(filtered)
+    
+    def display_corrections(self, corrections: list):
+        """訂正依頼を表示"""
+        self.table.setRowCount(0)
+        
+        for correction in corrections:
             row = self.table.rowCount()
             self.table.insertRow(row)
             
-            # 背景色設定
-            if correction['request_type'] == "出欠訂正":
-                bg_color = QColor(COLOR_ATTENDANCE)
-            else:
-                bg_color = QColor(COLOR_GRADE)
-            
-            # データ設定
-            id_item = QTableWidgetItem(str(correction['correction_id']))
-            id_item.setBackground(bg_color)
-            self.table.setItem(row, 0, id_item)
+            self.table.setItem(row, 0, QTableWidgetItem(str(correction['correction_id'])))
             
             type_item = QTableWidgetItem(correction['request_type'])
-            type_item.setBackground(bg_color)
+            if correction['request_type'] == '出欠訂正':
+                type_item.setBackground(QColor(COLOR_ATTENDANCE))
+            else:
+                type_item.setBackground(QColor(COLOR_GRADE))
             self.table.setItem(row, 1, type_item)
             
             self.table.setItem(row, 2, QTableWidgetItem(correction.get('student_name', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(correction.get('class_number', '')))
-            self.table.setItem(row, 4, QTableWidgetItem(correction.get('course_name', '')))
+            self.table.setItem(row, 3, QTableWidgetItem(correction.get('course_name', '')))
             
-            correction_text = f"{correction.get('before_value', '')} → {correction.get('after_value', '')}"
-            self.table.setItem(row, 5, QTableWidgetItem(correction_text))
+            date_semester = ""
+            if correction.get('target_date'):
+                date_semester = correction['target_date']
+            if correction.get('semester'):
+                if date_semester:
+                    date_semester += f" / {correction['semester']}"
+                else:
+                    date_semester = correction['semester']
+            self.table.setItem(row, 4, QTableWidgetItem(date_semester))
             
-            reason = correction.get('reason', '')[:50]
-            if len(correction.get('reason', '')) > 50:
-                reason += '...'
-            self.table.setItem(row, 6, QTableWidgetItem(reason))
+            content = ""
+            if correction.get('before_value'):
+                content = f"{correction['before_value']} → {correction['after_value']}"
+            else:
+                content = correction['after_value']
+            self.table.setItem(row, 5, QTableWidgetItem(content))
             
-            self.table.setItem(row, 7, QTableWidgetItem(correction.get('requester_name', '')))
-            
-            lock_text = f"🔒 {correction.get('locked_by', '')}" if correction['is_locked'] else ""
-            self.table.setItem(row, 8, QTableWidgetItem(lock_text))
+            lock_text = "🔒" if correction['is_locked'] else ""
+            self.table.setItem(row, 6, QTableWidgetItem(lock_text))
     
     def on_view_clicked(self):
-        """表示ボタンクリック"""
+        """表示ボタンがクリックされた"""
         selected_items = self.table.selectedItems()
-        if not selected_items:
-            return
-        
-        row = selected_items[0].row()
-        correction_id = int(self.table.item(row, 0).text())
-        self.view_requested.emit(correction_id)
+        if selected_items:
+            row = selected_items[0].row()
+            correction_id = int(self.table.item(row, 0).text())
+            self.view_requested.emit(correction_id)
     
     def on_delete_clicked(self):
-        """削除ボタンクリック"""
+        """削除ボタンがクリックされた"""
         selected_items = self.table.selectedItems()
-        if not selected_items:
-            return
-        
-        row = selected_items[0].row()
-        correction_id = int(self.table.item(row, 0).text())
-        self.delete_requested.emit(correction_id)
+        if selected_items:
+            row = selected_items[0].row()
+            correction_id = int(self.table.item(row, 0).text())
+            self.delete_requested.emit(correction_id)

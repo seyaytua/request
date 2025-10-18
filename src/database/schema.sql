@@ -1,26 +1,27 @@
--- 訂正依頼システム - データベーススキーマ v1.4.0
+-- 訂正依頼システム v1.5.0 - データベーススキーマ
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
 -- 生徒情報テーブル
 CREATE TABLE IF NOT EXISTS students (
-    student_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id TEXT PRIMARY KEY,  -- 年度-組番号 (例: 2024-F1221)
     year INTEGER NOT NULL,
     class_number TEXT NOT NULL,
-    student_number TEXT,
+    student_number TEXT NOT NULL,  -- 学籍番号（7桁）
     name TEXT NOT NULL,
     name_kana TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(year, class_number, student_number)
+    UNIQUE(year, class_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_year_class ON students(year, class_number);
 CREATE INDEX IF NOT EXISTS idx_students_name ON students(name);
+CREATE INDEX IF NOT EXISTS idx_students_kana ON students(name_kana);
 
 -- 講座情報テーブル
 CREATE TABLE IF NOT EXISTS courses (
-    course_id TEXT PRIMARY KEY,
+    course_id TEXT PRIMARY KEY,  -- 年度-講座番号 (例: 2024-MATH-01)
     course_name TEXT NOT NULL,
     teacher_name TEXT,
     year INTEGER NOT NULL,
@@ -33,11 +34,11 @@ CREATE TABLE IF NOT EXISTS courses (
 CREATE INDEX IF NOT EXISTS idx_courses_year ON courses(year);
 CREATE INDEX IF NOT EXISTS idx_courses_name ON courses(course_name);
 
--- 訂正依頼テーブル（statusカラム削除）
+-- 訂正依頼テーブル
 CREATE TABLE IF NOT EXISTS correction_requests (
     correction_id INTEGER PRIMARY KEY AUTOINCREMENT,
     request_type TEXT NOT NULL CHECK(request_type IN ('出欠訂正', '評価評定変更')),
-    student_id INTEGER NOT NULL,
+    student_id TEXT NOT NULL,
     course_id TEXT NOT NULL,
     target_date TEXT,
     semester TEXT,
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS operation_logs (
     pc_name TEXT NOT NULL,
     operation_type TEXT NOT NULL,
     target_table TEXT NOT NULL,
-    target_record_id INTEGER,
+    target_record_id TEXT,
     before_data TEXT,
     after_data TEXT,
     operation_detail TEXT,
@@ -93,7 +94,9 @@ CREATE TABLE IF NOT EXISTS system_settings (
 
 INSERT OR IGNORE INTO system_settings (setting_key, setting_value) VALUES
 ('admin_password_hash', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'),
+('app_version', '1.5.0'),
+('db_version', '1.5'),
 ('app_title', '訂正依頼システム'),
 ('notice_message', '成績の訂正の場合は、教務に報告してからこちらの訂正依頼を申請してください。訂正依頼後は、成績入力シートなどのデータも忘れずに修正しておいてください。'),
-('app_version', '1.4.0'),
-('db_version', '1.4');
+('backup_interval', '5'),
+('launch_count', '0');

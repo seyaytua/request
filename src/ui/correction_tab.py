@@ -1,5 +1,5 @@
 """
-訂正入力タブ v1.4.0
+訂正入力タブ v1.5.0
 左65%にリスト、右35%に入力フォーム
 """
 import csv
@@ -86,6 +86,26 @@ class CorrectionTab(QWidget):
         success_count = 0
         
         for i, correction_data in enumerate(corrections):
+            # 生徒情報と講座情報を追加
+            student_id = correction_data.get('student_id')
+            course_id = correction_data.get('course_id')
+            
+            if student_id:
+                students = self.controller.get_students()
+                for student in students:
+                    if student['student_id'] == student_id:
+                        correction_data['student_name'] = student['name']
+                        correction_data['class_number'] = student['class_number']
+                        break
+            
+            if course_id:
+                courses = self.controller.get_courses()
+                for course in courses:
+                    if course['course_id'] == course_id:
+                        correction_data['course_name'] = course['course_name']
+                        correction_data['teacher_name'] = course.get('teacher_name', '')
+                        break
+            
             dialog = ConfirmationDialog(correction_data, self)
             result = dialog.exec()
             

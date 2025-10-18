@@ -1,6 +1,5 @@
 """
-メインウィンドウ v1.4.0
-タブで訂正入力、お知らせ、システム部管理を切り替え
+メインウィンドウ v1.5.0
 """
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QMessageBox, QStatusBar
@@ -19,6 +18,7 @@ from ..controllers.correction_controller import CorrectionController
 from ..controllers.log_controller import LogController
 from ..controllers.auth_controller import AuthController
 from ..controllers.master_controller import MasterController
+from ..utils.backup_manager import BackupManager
 from ..config import APP_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, DB_PATH
 from ..utils.logger import get_logger
 from ..utils.system_info import get_user_identifier
@@ -37,10 +37,15 @@ class MainWindow(QMainWindow):
         self.init_database()
         self.init_controllers()
         self.load_app_title()
-        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        
+        # 起動時に最大化
+        self.showMaximized()
         
         self.setup_ui()
         self.setup_statusbar()
+        
+        # バックアップチェック
+        self.check_backup()
         
         logger.info(f"アプリケーション起動: {get_user_identifier()}")
     
@@ -73,6 +78,7 @@ class MainWindow(QMainWindow):
         self.master_controller = MasterController(
             self.db, self.log_controller
         )
+        self.backup_manager = BackupManager()
     
     def load_app_title(self):
         """アプリタイトルを読み込み"""
@@ -91,15 +97,12 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
-        # 訂正入力タブ
         self.correction_tab = CorrectionTab(self.correction_controller)
         self.tabs.addTab(self.correction_tab, "📝 訂正入力")
         
-        # お知らせタブ
         self.notice_tab = NoticeTab(self.auth_controller)
         self.tabs.addTab(self.notice_tab, "📢 お知らせ")
         
-        # システム部管理タブ
         self.admin_tab = AdminTab(
             self.correction_controller,
             self.log_controller,
@@ -116,6 +119,35 @@ class MainWindow(QMainWindow):
         
         user_info = get_user_identifier()
         self.statusbar.showMessage(f"ログイン: {user_info}")
+    
+    def check_backup(self):
+        """バックアップをチェック"""
+        try:
+            # 起動回数を取得
+            launch_count = int(self.auth_controller.get_setting('launch_count') or '0')
+            launch_count += 1
+            
+            # 起動回数を更新
+            self.auth_controller.set_setting('launch_count', str(launch_count))
+            
+            # バックアップ間隔を取得
+            backup_interval = int(self.auth_controller.get_setting('backup_interval') or '5')
+            
+            # バックアップ実行
+            if launch_count % backup_interval == 0:
+                logger.info(f"バックアップを実行します（起動{launch_count}回目）")
+                backup_path = self.backup_manager.create_backup()
+                
+                if backup_path:
+                    self.statusbar.showMessage(f"バックアップを作成しました: {backup_path.name}", 5000)
+                    
+                    # 古いバックアップを削除
+                    self.backup_manager.cleanup_old_backups(keep_count=10)
+                else:
+                    logger.warning("バックアップの作成に失敗しました")
+        
+        except Exception as e:
+            logger.error(f"バックアップチェックに失敗: {e}")
     
     def on_tab_changed(self, index: int):
         """タブが変更された時"""
@@ -158,7 +190,7 @@ class MainWindow(QMainWindow):
     def setup_settings_tab(self):
         """設定タブをセットアップ"""
         if not hasattr(self.admin_tab, 'settings_tab_added'):
-            settings_tab = SettingsTab(self.auth_controller)
+            settings_tab = SettingsTab(self.auth_controller, self.backup_manager)
             settings_tab.title_changed.connect(self.on_title_changed)
             settings_tab.notice_changed.connect(self.on_notice_changed)
             
