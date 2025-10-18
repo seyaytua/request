@@ -27,7 +27,12 @@ jobs:
         pip install pyinstaller
     
     - name: Build Windows executable
-      run: pyinstaller --clean --onefile --windowed --name=CorrectionRequestSystem main.py
+      run: |
+        pyinstaller --clean --onefile --windowed ^
+          --name=CorrectionRequestSystem ^
+          --add-data="src;src" ^
+          main.py
+      shell: cmd
     
     - name: Create Windows package
       run: |
@@ -73,7 +78,10 @@ jobs:
     
     - name: Build macOS executable
       run: |
-        pyinstaller --clean --onefile --windowed --name=CorrectionRequestSystem main.py
+        pyinstaller --clean --onefile --windowed \
+          --name=CorrectionRequestSystem \
+          --add-data="src:src" \
+          main.py
     
     - name: Create macOS package
       run: |
@@ -81,7 +89,7 @@ jobs:
         cp dist/CorrectionRequestSystem portable/訂正依頼システム
         chmod +x portable/訂正依頼システム
         mkdir -p portable/data
-        cat > portable/README.txt << 'EOF'
+        cat > portable/README.txt << 'READMEEOF'
         訂正依頼システム v${{ github.ref_name }} - macOS版
         
         使い方:
@@ -96,7 +104,7 @@ jobs:
         注意:
         - 初回起動時に「開発元を確認できません」と表示される場合:
           右クリック → 開く で起動してください
-        EOF
+        READMEEOF
     
     - name: Create macOS ZIP
       run: |
@@ -140,46 +148,25 @@ jobs:
           
           #### 🪟 Windows版
           `CorrectionRequestSystem-${{ github.ref_name }}-Windows.zip`
-          - Windows 10/11 (64bit) 対応
-          - ダウンロード後、解凍して `訂正依頼システム.exe` を起動
           
           #### 🍎 macOS版
           `CorrectionRequestSystem-${{ github.ref_name }}-macOS.zip`
-          - macOS 10.15 (Catalina) 以降対応
-          - Apple Silicon (M1/M2/M3) & Intel 両対応
-          - ダウンロード後、解凍して右クリック → 開く で起動
           
-          ---
+          ### 🚀 インストール
           
-          ### 🚀 インストール方法
+          **Windows**: 解凍して `訂正依頼システム.exe` を起動
           
-          #### Windows
-          1. ZIPをダウンロード
-          2. 解凍
-          3. `訂正依頼システム.exe` をダブルクリック
-          
-          #### macOS
-          1. ZIPをダウンロード
-          2. 解凍
-          3. ターミナルで: `chmod +x 訂正依頼システム && ./訂正依頼システム`
-          4. または右クリック → 開く
-          
-          ---
+          **macOS**: 解凍して右クリック → 開く で起動
           
           ### 📋 初回起動
           
-          - 管理者パスワード: `admin123`
-          - ⚠️ 必ず変更してください
-          
-          ---
+          管理者パスワード: `admin123` (必ず変更してください)
           
           ### ✨ 主な機能
           
-          - ✅ 出欠訂正・評価評定変更の依頼管理
-          - ✅ 自動バックアップ
-          - ✅ 生徒名・講座名検索（ひらがな対応）
-          - ✅ CSVエクスポート/インポート
-          
-          詳細: [CHANGELOG.md](https://github.com/seyaytua/request/blob/main/CHANGELOG.md)
+          - 出欠訂正・評価評定変更の依頼管理
+          - 自動バックアップ
+          - 生徒名・講座名検索（ひらがな対応）
+          - CSV入出力
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
