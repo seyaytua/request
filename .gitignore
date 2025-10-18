@@ -35,3 +35,14 @@ Thumbs.db
 *.spec
 dist/
 build/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Backup files
+data/backups/
+*.db-journal
+*.db-wal
+*.db-shm
