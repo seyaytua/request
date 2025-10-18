@@ -1,17 +1,18 @@
-name: Build and Test
+name: Build Windows Executable
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  build-windows:
+    runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -22,16 +23,81 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyinstaller
     
-    - name: Run tests
+    - name: Build executable
       run: |
-        python -m pytest tests/ || echo "No tests found"
+        pyinstaller --onefile --windowed --name="訂正依頼システム" main.py
     
-    - name: Upload artifacts
+    - name: Create release package
+      run: |
+        mkdir release
+        copy dist\訂正依頼システム.exe release\
+        mkdir release\data
+        echo "初回起動時に自動的にデータベースが作成されます" > release\data\README.txt
+        
+    - name: Archive release
+      run: |
+        Compress-Archive -Path release\* -DestinationPath "訂正依頼システム-v${{ github.ref_name }}.zip"
+      shell: pwsh
+    
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
-      if: always()
       with:
-        name: test-results
-        path: |
-          data/
-          *.log
+        name: 訂正依頼システム-${{ github.ref_name }}
+        path: release/
+        retention-days: 90
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          訂正依頼システム-v${{ github.ref_name }}.zip
+          dist/訂正依頼システム.exe
+        body: |
+          ## 訂正依頼システム ${{ github.ref_name }}
+          
+          ### 📥 ダウンロード
+          
+          **推奨**: `訂正依頼システム-v${{ github.ref_name }}.zip` をダウンロード
+          - 実行ファイル + データフォルダが含まれています
+          
+          または、`訂正依頼システム.exe` 単体でもダウンロード可能です。
+          
+          ### 🚀 インストール方法
+          
+          1. ZIPファイルをダウンロード
+          2. 任意のフォルダに解凍
+          3. `訂正依頼システム.exe` をダブルクリックで起動
+          
+          ### 📋 初回起動時
+          
+          - 自動的に `data` フォルダとデータベースが作成されます
+          - 管理者パスワード: `admin123`（変更推奨）
+          - バックアップは `data/backups/` に保存されます
+          
+          ### ✨ 主な機能
+          
+          - ✅ 出欠訂正・評価評定変更の依頼管理
+          - ✅ 自動バックアップ機能（起動回数ベース）
+          - ✅ 生徒名・講座名検索（ひらがな対応）
+          - ✅ CSVエクスポート/インポート
+          - ✅ 操作ログ記録
+          - ✅ パスワード保護された管理画面
+          
+          ### 💻 システム要件
+          
+          - OS: Windows 10/11 (64bit)
+          - メモリ: 4GB以上推奨
+          - ディスク: 100MB以上の空き容量
+          
+          ### 📖 詳細な変更内容
+          
+          [CHANGELOG.md](https://github.com/seyaytua/request/blob/main/CHANGELOG.md) を参照してください。
+          
+          ### 🐛 不具合報告
+          
+          不具合を見つけた場合は、[Issues](https://github.com/seyaytua/request/issues) にてご報告ください。
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
