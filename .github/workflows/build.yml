@@ -25,27 +25,78 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build executable
+    - name: Build executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name="訂正依頼システム" main.py
+        pyinstaller --clean --onefile --windowed ^
+          --name="訂正依頼システム" ^
+          --add-data "src;src" ^
+          --hidden-import=PySide6.QtCore ^
+          --hidden-import=PySide6.QtGui ^
+          --hidden-import=PySide6.QtWidgets ^
+          --hidden-import=sqlite3 ^
+          --collect-all PySide6 ^
+          main.py
+      shell: cmd
     
-    - name: Create release package
+    - name: Create portable package
       run: |
-        mkdir release
-        copy dist\訂正依頼システム.exe release\
-        mkdir release\data
-        echo "初回起動時に自動的にデータベースが作成されます" > release\data\README.txt
+        mkdir portable
+        copy dist\訂正依頼システム.exe portable\
+        mkdir portable\data
+        echo 初回起動時に自動的にデータベースが作成されます > portable\data\README.txt
         
-    - name: Archive release
+        echo 【訂正依頼システム v${{ github.ref_name }}】 > portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ 使い方 >> portable\README.txt
+        echo 1. 訂正依頼システム.exe をダブルクリックで起動 >> portable\README.txt
+        echo 2. 初回起動時に data フォルダにデータベースが自動作成されます >> portable\README.txt
+        echo 3. 管理者パスワード（初期）: admin123 >> portable\README.txt
+        echo    ※セキュリティのため、初回ログイン後に必ず変更してください >> portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ システム要件 >> portable\README.txt
+        echo - Windows 10/11 (64bit) >> portable\README.txt
+        echo - メモリ: 4GB以上推奨 >> portable\README.txt
+        echo - ディスク: 100MB以上の空き容量 >> portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ 主な機能 >> portable\README.txt
+        echo - 出欠訂正・評価評定変更の依頼管理 >> portable\README.txt
+        echo - 自動バックアップ機能（起動回数ベース） >> portable\README.txt
+        echo - 生徒名・講座名検索（ひらがな対応） >> portable\README.txt
+        echo - CSVエクスポート/インポート >> portable\README.txt
+        echo - 操作ログ記録 >> portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ データの保存場所 >> portable\README.txt
+        echo - データベース: data\corrections.db >> portable\README.txt
+        echo - バックアップ: data\backups\ >> portable\README.txt
+        echo - ログ: data\app.log >> portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ 注意事項 >> portable\README.txt
+        echo - このフォルダごと共有サーバーに配置してください >> portable\README.txt
+        echo - 複数人で同時に使用する場合は、同じフォルダを参照してください >> portable\README.txt
+        echo - データベースファイルは定期的にバックアップされます >> portable\README.txt
+        echo. >> portable\README.txt
+        echo ■ サポート >> portable\README.txt
+        echo 不具合報告: https://github.com/seyaytua/request/issues >> portable\README.txt
+        echo ドキュメント: https://github.com/seyaytua/request >> portable\README.txt
+      shell: cmd
+        
+    - name: Create ZIP archive
       run: |
-        Compress-Archive -Path release\* -DestinationPath "訂正依頼システム-v${{ github.ref_name }}.zip"
+        Compress-Archive -Path portable\* -DestinationPath "訂正依頼システム-v${{ github.ref_name }}-Windows.zip"
+      shell: pwsh
+    
+    - name: Calculate file hash
+      run: |
+        $hash = Get-FileHash "訂正依頼システム-v${{ github.ref_name }}-Windows.zip" -Algorithm SHA256
+        $hash.Hash | Out-File -FilePath "SHA256SUMS.txt" -Encoding UTF8
+        echo "訂正依頼システム-v${{ github.ref_name }}-Windows.zip" | Out-File -FilePath "SHA256SUMS.txt" -Append -Encoding UTF8
       shell: pwsh
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: 訂正依頼システム-${{ github.ref_name }}
-        path: release/
+        name: 訂正依頼システム-${{ github.ref_name }}-Windows
+        path: portable/
         retention-days: 90
     
     - name: Create Release
@@ -53,51 +104,144 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          訂正依頼システム-v${{ github.ref_name }}.zip
-          dist/訂正依頼システム.exe
+          訂正依頼システム-v${{ github.ref_name }}-Windows.zip
+          SHA256SUMS.txt
         body: |
-          ## 訂正依頼システム ${{ github.ref_name }}
+          ## 📦 訂正依頼システム ${{ github.ref_name }}
+          
+          学校における出欠訂正・評価評定変更の依頼を管理するデスクトップアプリケーション
+          
+          ---
           
           ### 📥 ダウンロード
           
-          **推奨**: `訂正依頼システム-v${{ github.ref_name }}.zip` をダウンロード
-          - 実行ファイル + データフォルダが含まれています
+          **Windows用パッケージ**: `訂正依頼システム-v${{ github.ref_name }}-Windows.zip`
           
-          または、`訂正依頼システム.exe` 単体でもダウンロード可能です。
+          このZIPファイルには以下が含まれています：
+          - 実行ファイル（`訂正依頼システム.exe`）
+          - データフォルダ
+          - 使い方説明（README.txt）
+          
+          ---
           
           ### 🚀 インストール方法
           
-          1. ZIPファイルをダウンロード
+          #### 個人利用の場合
+          1. `訂正依頼システム-v${{ github.ref_name }}-Windows.zip` をダウンロード
           2. 任意のフォルダに解凍
           3. `訂正依頼システム.exe` をダブルクリックで起動
+          
+          #### 共有サーバーでの利用（推奨）
+          1. ZIPファイルをダウンロード
+          2. 共有サーバーの適切な場所に解凍（例: `\\server\shared\訂正依頼システム\`）
+          3. 各ユーザーは共有フォルダ内の `訂正依頼システム.exe` を起動
+          4. データベースは自動的に共有され、複数人で同時利用可能
+          
+          ---
           
           ### 📋 初回起動時
           
           - 自動的に `data` フォルダとデータベースが作成されます
-          - 管理者パスワード: `admin123`（変更推奨）
-          - バックアップは `data/backups/` に保存されます
+          - **管理者パスワード**: `admin123`
+          - ⚠️ **セキュリティのため、初回ログイン後に必ず変更してください**
+          - バックアップは `data/backups/` に自動保存されます
           
-          ### ✨ 主な機能
+          ---
           
+          ### ✨ 主な機能（v1.5.0）
+          
+          #### 💾 バックアップ機能
+          - ✅ 定期自動バックアップ（起動回数ベース、デフォルト5回ごと）
+          - ✅ バックアップ間隔の設定変更（1〜100回）
+          - ✅ 手動バックアップ機能
+          - ✅ 古いバックアップ自動削除（最新10件保持）
+          
+          #### 🔍 検索機能
+          - ✅ 生徒名検索（ひらがな対応）
+          - ✅ 講座名検索
+          - ✅ 高速フィルタリング
+          
+          #### 📊 管理機能
           - ✅ 出欠訂正・評価評定変更の依頼管理
-          - ✅ 自動バックアップ機能（起動回数ベース）
-          - ✅ 生徒名・講座名検索（ひらがな対応）
           - ✅ CSVエクスポート/インポート
-          - ✅ 操作ログ記録
+          - ✅ 操作ログ記録（削除データの詳細記録）
           - ✅ パスワード保護された管理画面
+          - ✅ ロック機能（編集防止）
+          
+          #### 🎨 UI改善
+          - ✅ 起動時画面最大化
+          - ✅ 確認ダイアログに詳細情報表示
+          - ✅ 色分けUI（出欠:緑、評価:オレンジ）
+          
+          ---
           
           ### 💻 システム要件
           
-          - OS: Windows 10/11 (64bit)
-          - メモリ: 4GB以上推奨
-          - ディスク: 100MB以上の空き容量
+          - **OS**: Windows 10/11 (64bit)
+          - **メモリ**: 4GB以上推奨
+          - **ディスク**: 100MB以上の空き容量
+          - **その他**: .NET Framework等のインストール不要（スタンドアロン実行可能）
+          
+          ---
+          
+          ### 📂 データの保存場所
+          
+          ```
+          訂正依頼システム/
+          ├── 訂正依頼システム.exe    # 実行ファイル
+          ├── README.txt              # 使い方説明
+          └── data/                   # データフォルダ
+              ├── corrections.db      # データベース
+              ├── backups/            # バックアップ
+              └── app.log             # ログファイル
+          ```
+          
+          ---
+          
+          ### ⚠️ 注意事項
+          
+          - **共有サーバーでの利用を推奨**: 複数人で同じデータベースを参照できます
+          - **バックアップ**: 自動バックアップ機能がありますが、重要なデータは別途バックアップしてください
+          - **パスワード**: 初期パスワード `admin123` は必ず変更してください
+          - **Windows Defenderの警告**: 初回起動時に警告が出る場合があります。「詳細情報」→「実行」で起動できます
+          
+          ---
+          
+          ### 🔒 セキュリティチェック
+          
+          ダウンロードしたファイルの整合性を確認できます：
+          
+          ```powershell
+          # PowerShellで実行
+          Get-FileHash "訂正依頼システム-v${{ github.ref_name }}-Windows.zip" -Algorithm SHA256
+          ```
+          
+          SHA256ハッシュ値は `SHA256SUMS.txt` に記載されています。
+          
+          ---
           
           ### 📖 詳細な変更内容
           
           [CHANGELOG.md](https://github.com/seyaytua/request/blob/main/CHANGELOG.md) を参照してください。
           
-          ### 🐛 不具合報告
+          ---
           
-          不具合を見つけた場合は、[Issues](https://github.com/seyaytua/request/issues) にてご報告ください。
+          ### 🐛 不具合報告・機能要望
+          
+          不具合を見つけた場合や機能要望がある場合は、以下にてご報告ください：
+          - [Issues](https://github.com/seyaytua/request/issues)
+          
+          ---
+          
+          ### 📚 ドキュメント
+          
+          - [README.md](https://github.com/seyaytua/request/blob/main/README.md) - プロジェクト概要
+          - [CHANGELOG.md](https://github.com/seyaytua/request/blob/main/CHANGELOG.md) - 変更履歴
+          - [docs/](https://github.com/seyaytua/request/tree/main/docs) - 詳細設計書
+          
+          ---
+          
+          **開発者**: seyaytua  
+          **ライセンス**: 教育目的での使用を想定しています
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
