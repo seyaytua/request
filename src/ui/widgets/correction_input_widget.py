@@ -1,154 +1,44 @@
 """
 訂正入力ウィジェット
-訂正依頼の入力フォーム
+複数の入力フォームを管理
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QLineEdit, QComboBox, QTextEdit, QDateEdit,
-    QRadioButton, QButtonGroup, QScrollArea, QGroupBox,
-    QMessageBox, QListWidget
+    QScrollArea, QMessageBox, QLabel, QRadioButton,
+    QButtonGroup, QComboBox, QTextEdit, QDateEdit,
+    QGroupBox, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from typing import List, Dict, Any
 
 from ...config import (
-    REQUEST_TYPES, ATTENDANCE_TYPES, GRADE_TYPES, 
-    SEMESTER_TYPES, PERIOD_TYPES, COLOR_ATTENDANCE, COLOR_GRADE
+    REQUEST_TYPES, ATTENDANCE_TYPES, SEMESTER_TYPES, PERIOD_TYPES,
+    COLOR_ATTENDANCE, COLOR_GRADE
 )
 from ...utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class CorrectionInputWidget(QWidget):
-    """訂正入力ウィジェット"""
+class CorrectionFormWidget(QWidget):
+    """個別の訂正入力フォーム"""
     
-    submit_requested = Signal(list)  # 訂正依頼リストを送信
+    remove_requested = Signal(object)
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.students = []
         self.courses = []
-        self.forms = []
         self.setup_ui()
     
     def setup_ui(self):
         """UIをセットアップ"""
         layout = QVBoxLayout()
-        
-        # スクロールエリア
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        
-        # スクロール内のコンテナ
-        self.scroll_widget = QWidget()
-        self.scroll_layout = QVBoxLayout()
-        
-        # 最初のフォームを追加
-        self.add_form()
-        
-        # フォーム追加ボタン
-        add_btn = QPushButton("+ 入力フォームを複製")
-        add_btn.clicked.connect(self.add_form)
-        self.scroll_layout.addWidget(add_btn)
-        
-        self.scroll_layout.addStretch()
-        self.scroll_widget.setLayout(self.scroll_layout)
-        scroll.setWidget(self.scroll_widget)
-        
-        layout.addWidget(scroll)
-        
-        # 送信ボタン
-        submit_btn = QPushButton("確認して登録")
-        submit_btn.clicked.connect(self.on_submit)
-        submit_btn.setStyleSheet("font-size: 14px; padding: 10px;")
-        layout.addWidget(submit_btn)
-        
-        self.setLayout(layout)
-    
-    def add_form(self):
-        """フォームを追加"""
-        form = CorrectionFormWidget(len(self.forms) + 1)
-        form.set_students(self.students)
-        form.set_courses(self.courses)
-        form.remove_requested.connect(lambda: self.remove_form(form))
-        
-        # 最後のボタンの前に挿入
-        self.scroll_layout.insertWidget(len(self.forms), form)
-        self.forms.append(form)
-        
-        logger.info(f"フォームを追加しました（合計: {len(self.forms)}）")
-    
-    def remove_form(self, form):
-        """フォームを削除"""
-        if len(self.forms) <= 1:
-            QMessageBox.warning(self, "警告", "最後のフォームは削除できません")
-            return
-        
-        self.forms.remove(form)
-        form.deleteLater()
-        
-        # フォーム番号を振り直し
-        for i, f in enumerate(self.forms):
-            f.set_form_number(i + 1)
-        
-        logger.info(f"フォームを削除しました（残り: {len(self.forms)}）")
-    
-    def set_students(self, students: List[Dict[str, Any]]):
-        """生徒リストをセット"""
-        self.students = students
-        for form in self.forms:
-            form.set_students(students)
-    
-    def set_courses(self, courses: List[Dict[str, Any]]):
-        """講座リストをセット"""
-        self.courses = courses
-        for form in self.forms:
-            form.set_courses(courses)
-    
-    def on_submit(self):
-        """送信処理"""
-        corrections = []
-        
-        for form in self.forms:
-            data = form.get_data()
-            if data:
-                corrections.append(data)
-        
-        if not corrections:
-            QMessageBox.warning(self, "警告", "入力されたフォームがありません")
-            return
-        
-        self.submit_requested.emit(corrections)
-    
-    def clear_all(self):
-        """全フォームをクリア"""
-        for form in self.forms:
-            form.clear()
-
-
-class CorrectionFormWidget(QGroupBox):
-    """個別の訂正入力フォーム"""
-    
-    remove_requested = Signal()
-    
-    def __init__(self, form_number: int, parent=None):
-        super().__init__(f"訂正依頼 #{form_number}", parent)
-        self.form_number = form_number
-        self.students = []
-        self.courses = []
-        self.setup_ui()
-        self.update_background_color()
-    
-    def setup_ui(self):
-        """UIをセットアップ"""
-        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # 削除ボタン
-        remove_btn = QPushButton("✕ このフォームを削除")
-        remove_btn.clicked.connect(self.remove_requested.emit)
-        remove_btn.setStyleSheet("color: red;")
+        remove_btn = QPushButton("❌ このフォームを削除")
+        remove_btn.clicked.connect(lambda: self.remove_requested.emit(self))
         layout.addWidget(remove_btn)
         
         # 訂正種別
@@ -158,295 +48,452 @@ class CorrectionFormWidget(QGroupBox):
         self.type_group = QButtonGroup()
         self.attendance_radio = QRadioButton("出欠訂正")
         self.grade_radio = QRadioButton("評価評定変更")
+        self.attendance_radio.setChecked(True)
+        
         self.type_group.addButton(self.attendance_radio)
         self.type_group.addButton(self.grade_radio)
-        self.attendance_radio.setChecked(True)
-        self.attendance_radio.toggled.connect(self.on_type_changed)
         
         type_layout.addWidget(self.attendance_radio)
         type_layout.addWidget(self.grade_radio)
         type_layout.addStretch()
+        
         layout.addLayout(type_layout)
         
-        # 依頼者（必須）
+        # 種別変更時のイベント
+        self.attendance_radio.toggled.connect(self.on_type_changed)
+        
+        # 依頼者
         requester_layout = QHBoxLayout()
         requester_layout.addWidget(QLabel("依頼者:"))
-        self.requester_edit = QLineEdit()
-        self.requester_edit.setPlaceholderText("依頼者名を入力してください（必須）")
-        requester_layout.addWidget(self.requester_edit)
+        self.requester_input = QComboBox()
+        self.requester_input.setEditable(True)
+        requester_layout.addWidget(self.requester_input)
         layout.addLayout(requester_layout)
         
-        # 生徒検索
+        # 生徒選択
         student_layout = QHBoxLayout()
-        student_layout.addWidget(QLabel("生徒検索:"))
-        self.student_search = QLineEdit()
-        self.student_search.setPlaceholderText("生徒氏名または組番号で検索")
-        self.student_search.textChanged.connect(self.filter_students)
-        student_layout.addWidget(self.student_search)
+        student_layout.addWidget(QLabel("生徒:"))
+        self.student_combo = QComboBox()
+        self.student_combo.setEditable(True)
+        self.student_combo.setInsertPolicy(QComboBox.NoInsert)
+        student_layout.addWidget(self.student_combo)
         layout.addLayout(student_layout)
         
-        # 生徒選択
-        self.student_combo = QComboBox()
-        self.student_combo.setEditable(False)
-        layout.addWidget(QLabel("生徒:"))
-        layout.addWidget(self.student_combo)
-        
-        # 講座検索
+        # 講座選択
         course_layout = QHBoxLayout()
-        course_layout.addWidget(QLabel("講座検索:"))
-        self.course_search = QLineEdit()
-        self.course_search.setPlaceholderText("講座名で検索")
-        self.course_search.textChanged.connect(self.filter_courses)
-        course_layout.addWidget(self.course_search)
+        course_layout.addWidget(QLabel("講座:"))
+        self.course_combo = QComboBox()
+        self.course_combo.setEditable(True)
+        self.course_combo.setInsertPolicy(QComboBox.NoInsert)
+        course_layout.addWidget(self.course_combo)
         layout.addLayout(course_layout)
         
-        # 講座選択
-        self.course_combo = QComboBox()
-        self.course_combo.setEditable(False)
-        layout.addWidget(QLabel("講座:"))
-        layout.addWidget(self.course_combo)
-        
         # 出欠訂正用フィールド
-        self.attendance_widget = QWidget()
+        self.attendance_group = QGroupBox("出欠訂正")
         attendance_layout = QVBoxLayout()
         
         # 対象日付
         date_layout = QHBoxLayout()
         date_layout.addWidget(QLabel("対象日付:"))
         self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
         date_layout.addWidget(self.date_edit)
         attendance_layout.addLayout(date_layout)
         
-        # 校時（最大2つ選択可能）
-        attendance_layout.addWidget(QLabel("校時（最大2つ選択）:"))
-        self.period_list = QListWidget()
-        self.period_list.setSelectionMode(QListWidget.MultiSelection)
-        self.period_list.setMaximumHeight(150)
-        for period in PERIOD_TYPES:
-            self.period_list.addItem(period)
-        self.period_list.itemSelectionChanged.connect(self.on_period_selection_changed)
-        attendance_layout.addWidget(self.period_list)
+        # 学期選択（出欠訂正用）
+        semester_layout = QHBoxLayout()
+        semester_layout.addWidget(QLabel("学期:"))
+        self.attendance_semester_combo = QComboBox()
+        self.attendance_semester_combo.addItems(SEMESTER_TYPES)
+        semester_layout.addWidget(self.attendance_semester_combo)
+        attendance_layout.addLayout(semester_layout)
         
-        # 訂正前
+        # 校時選択
+        period_layout = QHBoxLayout()
+        period_layout.addWidget(QLabel("校時:"))
+        self.period_checks = []
+        for period in PERIOD_TYPES[:6]:
+            check = QCheckBox(period)
+            self.period_checks.append(check)
+            period_layout.addWidget(check)
+        attendance_layout.addLayout(period_layout)
+        
+        period_layout2 = QHBoxLayout()
+        period_layout2.addWidget(QLabel(""))
+        for period in PERIOD_TYPES[6:]:
+            check = QCheckBox(period)
+            self.period_checks.append(check)
+            period_layout2.addWidget(check)
+        attendance_layout.addLayout(period_layout2)
+        
+        # 訂正前/後
         before_layout = QHBoxLayout()
         before_layout.addWidget(QLabel("訂正前:"))
-        self.before_attendance = QComboBox()
-        self.before_attendance.addItems(ATTENDANCE_TYPES)
-        before_layout.addWidget(self.before_attendance)
+        self.attendance_before_combo = QComboBox()
+        self.attendance_before_combo.addItems(ATTENDANCE_TYPES)
+        before_layout.addWidget(self.attendance_before_combo)
         attendance_layout.addLayout(before_layout)
         
-        # 訂正後
         after_layout = QHBoxLayout()
         after_layout.addWidget(QLabel("訂正後:"))
-        self.after_attendance = QComboBox()
-        self.after_attendance.addItems(ATTENDANCE_TYPES)
-        after_layout.addWidget(self.after_attendance)
+        self.attendance_after_combo = QComboBox()
+        self.attendance_after_combo.addItems(ATTENDANCE_TYPES)
+        after_layout.addWidget(self.attendance_after_combo)
         attendance_layout.addLayout(after_layout)
         
-        self.attendance_widget.setLayout(attendance_layout)
-        layout.addWidget(self.attendance_widget)
+        self.attendance_group.setLayout(attendance_layout)
+        self.attendance_group.setStyleSheet(f"QGroupBox {{ background-color: {COLOR_ATTENDANCE}; }}")
+        layout.addWidget(self.attendance_group)
         
         # 評価評定変更用フィールド
-        self.grade_widget = QWidget()
+        self.grade_group = QGroupBox("評価評定変更")
         grade_layout = QVBoxLayout()
         
         # 学期
-        semester_layout = QHBoxLayout()
-        semester_layout.addWidget(QLabel("学期:"))
-        self.semester_combo = QComboBox()
-        self.semester_combo.addItems(SEMESTER_TYPES)
-        semester_layout.addWidget(self.semester_combo)
-        grade_layout.addLayout(semester_layout)
+        grade_semester_layout = QHBoxLayout()
+        grade_semester_layout.addWidget(QLabel("学期:"))
+        self.grade_semester_combo = QComboBox()
+        self.grade_semester_combo.addItems(SEMESTER_TYPES)
+        grade_semester_layout.addWidget(self.grade_semester_combo)
+        grade_layout.addLayout(grade_semester_layout)
         
-        # 訂正前
-        before_grade_layout = QHBoxLayout()
-        before_grade_layout.addWidget(QLabel("訂正前:"))
-        self.before_grade = QLineEdit()
-        self.before_grade.setPlaceholderText("例: 評価:A, 評定:8")
-        before_grade_layout.addWidget(self.before_grade)
-        grade_layout.addLayout(before_grade_layout)
+        # 訂正前/後
+        grade_before_layout = QHBoxLayout()
+        grade_before_layout.addWidget(QLabel("訂正前:"))
+        self.grade_before_input = QComboBox()
+        self.grade_before_input.setEditable(True)
+        grade_before_layout.addWidget(self.grade_before_input)
+        grade_layout.addLayout(grade_before_layout)
         
-        # 訂正後
-        after_grade_layout = QHBoxLayout()
-        after_grade_layout.addWidget(QLabel("訂正後:"))
-        self.after_grade = QLineEdit()
-        self.after_grade.setPlaceholderText("例: 評価:B, 評定:7")
-        after_grade_layout.addWidget(self.after_grade)
-        grade_layout.addLayout(after_grade_layout)
+        grade_after_layout = QHBoxLayout()
+        grade_after_layout.addWidget(QLabel("訂正後:"))
+        self.grade_after_input = QComboBox()
+        self.grade_after_input.setEditable(True)
+        grade_after_layout.addWidget(self.grade_after_input)
+        grade_layout.addLayout(grade_after_layout)
         
-        self.grade_widget.setLayout(grade_layout)
-        self.grade_widget.setVisible(False)
-        layout.addWidget(self.grade_widget)
+        self.grade_group.setLayout(grade_layout)
+        self.grade_group.setStyleSheet(f"QGroupBox {{ background-color: {COLOR_GRADE}; }}")
+        self.grade_group.setVisible(False)
+        layout.addWidget(self.grade_group)
         
         # 理由
         layout.addWidget(QLabel("理由:"))
         self.reason_edit = QTextEdit()
-        self.reason_edit.setMaximumHeight(100)
+        self.reason_edit.setMaximumHeight(80)
         layout.addWidget(self.reason_edit)
-        
-        # クリアボタン
-        clear_btn = QPushButton("クリア")
-        clear_btn.clicked.connect(self.clear)
-        layout.addWidget(clear_btn)
         
         self.setLayout(layout)
     
     def on_type_changed(self):
         """訂正種別が変更された時"""
         is_attendance = self.attendance_radio.isChecked()
-        self.attendance_widget.setVisible(is_attendance)
-        self.grade_widget.setVisible(not is_attendance)
-        self.update_background_color()
-    
-    def update_background_color(self):
-        """背景色を更新"""
-        if self.attendance_radio.isChecked():
-            color = COLOR_ATTENDANCE
-        else:
-            color = COLOR_GRADE
-        
-        self.setStyleSheet(f"""
-            QGroupBox {{
-                background-color: {color};
-                border: 2px solid #CCCCCC;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding: 10px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 5px;
-                font-weight: bold;
-            }}
-        """)
-    
-    def on_period_selection_changed(self):
-        """校時の選択が変更された時"""
-        selected = self.period_list.selectedItems()
-        if len(selected) > 2:
-            # 3つ以上選択された場合、最初の選択を解除
-            self.period_list.setCurrentItem(selected[0], QListWidget.Deselected)
-    
-    def filter_students(self, text: str):
-        """生徒を部分検索でフィルタ"""
-        self.student_combo.clear()
-        
-        if not text:
-            # 検索文字列が空の場合は全て表示
-            for student in self.students:
-                display_text = f"{student['class_number']} - {student['name']}"
-                self.student_combo.addItem(display_text, student['student_id'])
-        else:
-            # 部分一致で検索
-            filtered = [
-                s for s in self.students
-                if text.upper() in s['name'].upper() or 
-                   text.upper() in s['class_number'].upper()
-            ]
-            for student in filtered:
-                display_text = f"{student['class_number']} - {student['name']}"
-                self.student_combo.addItem(display_text, student['student_id'])
-    
-    def filter_courses(self, text: str):
-        """講座を部分検索でフィルタ"""
-        self.course_combo.clear()
-        
-        if not text:
-            for course in self.courses:
-                display_text = f"{course['course_name']} ({course['teacher_name']})"
-                self.course_combo.addItem(display_text, course['course_id'])
-        else:
-            filtered = [
-                c for c in self.courses
-                if text.upper() in c['course_name'].upper()
-            ]
-            for course in filtered:
-                display_text = f"{course['course_name']} ({course['teacher_name']})"
-                self.course_combo.addItem(display_text, course['course_id'])
-    
-    def set_form_number(self, number: int):
-        """フォーム番号を設定"""
-        self.form_number = number
-        self.setTitle(f"訂正依頼 #{number}")
+        self.attendance_group.setVisible(is_attendance)
+        self.grade_group.setVisible(not is_attendance)
     
     def set_students(self, students: List[Dict[str, Any]]):
-        """生徒リストをセット"""
+        """生徒リストを設定"""
         self.students = students
-        self.filter_students("")
+        self.student_combo.clear()
+        self.student_combo.addItem("", None)
+        
+        for student in students:
+            display_text = f"{student['class_number']} {student['name']}"
+            self.student_combo.addItem(display_text, student['student_id'])
     
     def set_courses(self, courses: List[Dict[str, Any]]):
-        """講座リストをセット"""
+        """講座リストを設定"""
         self.courses = courses
-        self.filter_courses("")
+        self.course_combo.clear()
+        self.course_combo.addItem("", None)
+        
+        for course in courses:
+            self.course_combo.addItem(course['course_name'], course['course_id'])
     
     def get_data(self) -> Dict[str, Any]:
         """入力データを取得"""
-        # 依頼者チェック
-        requester = self.requester_edit.text().strip()
-        if not requester:
-            QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 依頼者を入力してください")
-            return None
+        is_attendance = self.attendance_radio.isChecked()
         
-        # 生徒・講座チェック
-        if self.student_combo.currentIndex() < 0:
-            QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 生徒を選択してください")
-            return None
-        
-        if self.course_combo.currentIndex() < 0:
-            QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 講座を選択してください")
-            return None
-        
-        # 理由チェック
-        reason = self.reason_edit.toPlainText().strip()
-        if not reason:
-            QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 理由を入力してください")
-            return None
+        # 選択された校時を取得
+        selected_periods = [
+            check.text().replace("限", "") 
+            for check in self.period_checks 
+            if check.isChecked()
+        ]
         
         data = {
-            'request_type': '出欠訂正' if self.attendance_radio.isChecked() else '評価評定変更',
+            'request_type': REQUEST_TYPES['ATTENDANCE'] if is_attendance else REQUEST_TYPES['GRADE'],
+            'requester': self.requester_input.currentText().strip(),
             'student_id': self.student_combo.currentData(),
             'course_id': self.course_combo.currentData(),
-            'requester': requester,
-            'reason': reason
+            'reason': self.reason_edit.toPlainText().strip()
         }
         
-        if self.attendance_radio.isChecked():
-            # 校時チェック
-            selected_periods = [item.text() for item in self.period_list.selectedItems()]
-            if not selected_periods:
-                QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 校時を選択してください")
-                return None
-            
-            data['target_date'] = self.date_edit.date().toString("yyyy-MM-dd")
-            data['periods'] = ','.join([p.replace('限', '') for p in selected_periods])
-            data['before_value'] = self.before_attendance.currentText()
-            data['after_value'] = self.after_attendance.currentText()
+        if is_attendance:
+            data.update({
+                'target_date': self.date_edit.date().toString('yyyy-MM-dd'),
+                'semester': self.attendance_semester_combo.currentText(),
+                'periods': ','.join(selected_periods) if selected_periods else None,
+                'before_value': self.attendance_before_combo.currentText(),
+                'after_value': self.attendance_after_combo.currentText()
+            })
         else:
-            data['semester'] = self.semester_combo.currentText()
-            data['before_value'] = self.before_grade.text().strip()
-            data['after_value'] = self.after_grade.text().strip()
-            
-            if not data['after_value']:
-                QMessageBox.warning(self, "警告", f"フォーム #{self.form_number}: 訂正後の値を入力してください")
-                return None
+            data.update({
+                'semester': self.grade_semester_combo.currentText(),
+                'before_value': self.grade_before_input.currentText().strip(),
+                'after_value': self.grade_after_input.currentText().strip()
+            })
         
         return data
     
+    def set_data(self, data: Dict[str, Any]):
+        """データをフォームに設定（複製用）"""
+        # 訂正種別
+        if data.get('request_type') == REQUEST_TYPES['ATTENDANCE']:
+            self.attendance_radio.setChecked(True)
+        else:
+            self.grade_radio.setChecked(True)
+        
+        # 依頼者
+        if data.get('requester'):
+            self.requester_input.setCurrentText(data['requester'])
+        
+        # 生徒
+        if data.get('student_id'):
+            index = self.student_combo.findData(data['student_id'])
+            if index >= 0:
+                self.student_combo.setCurrentIndex(index)
+        
+        # 講座
+        if data.get('course_id'):
+            index = self.course_combo.findData(data['course_id'])
+            if index >= 0:
+                self.course_combo.setCurrentIndex(index)
+        
+        # 理由
+        if data.get('reason'):
+            self.reason_edit.setPlainText(data['reason'])
+        
+        # 出欠訂正の場合
+        if data.get('request_type') == REQUEST_TYPES['ATTENDANCE']:
+            if data.get('target_date'):
+                self.date_edit.setDate(QDate.fromString(data['target_date'], 'yyyy-MM-dd'))
+            
+            if data.get('semester'):
+                index = self.attendance_semester_combo.findText(data['semester'])
+                if index >= 0:
+                    self.attendance_semester_combo.setCurrentIndex(index)
+            
+            if data.get('periods'):
+                periods = data['periods'].split(',')
+                for check in self.period_checks:
+                    period_num = check.text().replace("限", "")
+                    check.setChecked(period_num in periods)
+            
+            if data.get('before_value'):
+                index = self.attendance_before_combo.findText(data['before_value'])
+                if index >= 0:
+                    self.attendance_before_combo.setCurrentIndex(index)
+            
+            if data.get('after_value'):
+                index = self.attendance_after_combo.findText(data['after_value'])
+                if index >= 0:
+                    self.attendance_after_combo.setCurrentIndex(index)
+        
+        # 評価評定変更の場合
+        else:
+            if data.get('semester'):
+                index = self.grade_semester_combo.findText(data['semester'])
+                if index >= 0:
+                    self.grade_semester_combo.setCurrentIndex(index)
+            
+            if data.get('before_value'):
+                self.grade_before_input.setCurrentText(data['before_value'])
+            
+            if data.get('after_value'):
+                self.grade_after_input.setCurrentText(data['after_value'])
+    
     def clear(self):
         """フォームをクリア"""
-        self.requester_edit.clear()
-        self.student_search.clear()
-        self.course_search.clear()
-        self.student_combo.setCurrentIndex(-1)
-        self.course_combo.setCurrentIndex(-1)
+        self.attendance_radio.setChecked(True)
+        self.requester_input.setCurrentIndex(0)
+        self.student_combo.setCurrentIndex(0)
+        self.course_combo.setCurrentIndex(0)
         self.date_edit.setDate(QDate.currentDate())
-        self.period_list.clearSelection()
-        self.before_attendance.setCurrentIndex(0)
-        self.after_attendance.setCurrentIndex(0)
-        self.semester_combo.setCurrentIndex(0)
-        self.before_grade.clear()
-        self.after_grade.clear()
+        self.attendance_semester_combo.setCurrentIndex(0)
+        
+        for check in self.period_checks:
+            check.setChecked(False)
+        
+        self.attendance_before_combo.setCurrentIndex(0)
+        self.attendance_after_combo.setCurrentIndex(0)
+        self.grade_semester_combo.setCurrentIndex(0)
+        self.grade_before_input.setCurrentText("")
+        self.grade_after_input.setCurrentText("")
         self.reason_edit.clear()
+    
+    def validate(self) -> tuple[bool, str]:
+        """入力内容を検証"""
+        if not self.requester_input.currentText().strip():
+            return False, "依頼者を入力してください"
+        
+        if not self.student_combo.currentData():
+            return False, "生徒を選択してください"
+        
+        if not self.course_combo.currentData():
+            return False, "講座を選択してください"
+        
+        if not self.reason_edit.toPlainText().strip():
+            return False, "理由を入力してください"
+        
+        is_attendance = self.attendance_radio.isChecked()
+        
+        if is_attendance:
+            selected_periods = [check for check in self.period_checks if check.isChecked()]
+            if len(selected_periods) > 2:
+                return False, "校時は最大2つまで選択できます"
+        else:
+            if not self.grade_after_input.currentText().strip():
+                return False, "訂正後の値を入力してください"
+        
+        return True, ""
+
+
+class CorrectionInputWidget(QWidget):
+    """訂正入力ウィジェット（複数フォーム管理）"""
+    
+    submit_requested = Signal(list)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.forms: List[CorrectionFormWidget] = []
+        self.setup_ui()
+        self.add_form()
+    
+    def setup_ui(self):
+        """UIをセットアップ"""
+        layout = QVBoxLayout()
+        
+        # ボタンエリア
+        button_layout = QHBoxLayout()
+        
+        add_btn = QPushButton("➕ 入力フォームを複製")
+        add_btn.clicked.connect(self.duplicate_form)
+        button_layout.addWidget(add_btn)
+        
+        submit_btn = QPushButton("✅ 確認して登録")
+        submit_btn.clicked.connect(self.on_submit)
+        button_layout.addWidget(submit_btn)
+        
+        clear_btn = QPushButton("🗑️ 全てクリア")
+        clear_btn.clicked.connect(self.clear_all)
+        button_layout.addWidget(clear_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # スクロールエリア
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        self.forms_container = QWidget()
+        self.forms_layout = QVBoxLayout()
+        self.forms_layout.addStretch()
+        self.forms_container.setLayout(self.forms_layout)
+        
+        scroll.setWidget(self.forms_container)
+        layout.addWidget(scroll)
+        
+        self.setLayout(layout)
+    
+    def add_form(self):
+        """新しいフォームを追加"""
+        form = CorrectionFormWidget()
+        form.remove_requested.connect(self.remove_form)
+        
+        # 既存のデータを引き継ぐ
+        if self.forms:
+            form.set_students(self.forms[0].students)
+            form.set_courses(self.forms[0].courses)
+        
+        self.forms.append(form)
+        self.forms_layout.insertWidget(len(self.forms) - 1, form)
+    
+    def duplicate_form(self):
+        """最後のフォームを複製"""
+        if not self.forms:
+            self.add_form()
+            return
+        
+        # 最後のフォームのデータを取得
+        last_form = self.forms[-1]
+        data = last_form.get_data()
+        
+        # 新しいフォームを追加
+        form = CorrectionFormWidget()
+        form.remove_requested.connect(self.remove_form)
+        form.set_students(last_form.students)
+        form.set_courses(last_form.courses)
+        
+        # データを設定
+        form.set_data(data)
+        
+        self.forms.append(form)
+        self.forms_layout.insertWidget(len(self.forms) - 1, form)
+        
+        logger.info("フォームを複製しました")
+    
+    def remove_form(self, form: CorrectionFormWidget):
+        """フォームを削除"""
+        if len(self.forms) <= 1:
+            QMessageBox.warning(self, "警告", "最後のフォームは削除できません")
+            return
+        
+        self.forms.remove(form)
+        self.forms_layout.removeWidget(form)
+        form.deleteLater()
+    
+    def set_students(self, students: List[Dict[str, Any]]):
+        """全フォームに生徒リストを設定"""
+        for form in self.forms:
+            form.set_students(students)
+    
+    def set_courses(self, courses: List[Dict[str, Any]]):
+        """全フォームに講座リストを設定"""
+        for form in self.forms:
+            form.set_courses(courses)
+    
+    def on_submit(self):
+        """登録ボタンがクリックされた時"""
+        corrections = []
+        
+        for i, form in enumerate(self.forms):
+            valid, error = form.validate()
+            if not valid:
+                QMessageBox.warning(self, "入力エラー", 
+                    f"フォーム{i+1}: {error}")
+                return
+            
+            corrections.append(form.get_data())
+        
+        self.submit_requested.emit(corrections)
+    
+    def clear_all(self):
+        """全フォームをクリア"""
+        reply = QMessageBox.question(
+            self, "確認", 
+            "全ての入力内容をクリアしますか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # 最初のフォーム以外を削除
+            while len(self.forms) > 1:
+                form = self.forms.pop()
+                self.forms_layout.removeWidget(form)
+                form.deleteLater()
+            
+            # 最初のフォームをクリア
+            if self.forms:
+                self.forms[0].clear()

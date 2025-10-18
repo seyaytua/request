@@ -16,7 +16,7 @@ from ..database.init_db import initialize_database
 from ..controllers.correction_controller import CorrectionController
 from ..controllers.log_controller import LogController
 from ..controllers.auth_controller import AuthController
-from ..config import APP_NAME, APP_VERSION, WINDOW_WIDTH, WINDOW_HEIGHT, DB_PATH
+from ..config import APP_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, DB_PATH
 from ..utils.logger import get_logger
 from ..utils.system_info import get_user_identifier
 
@@ -28,8 +28,11 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self.setWindowTitle(APP_NAME)  # バージョン表記を削除
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        
+        # 認証済みフラグ
+        self.is_authenticated = False
         
         # データベース初期化
         self.init_database()
@@ -48,7 +51,6 @@ class MainWindow(QMainWindow):
     def init_database(self):
         """データベースを初期化"""
         try:
-            # データベースが存在しない場合は作成
             if not DB_PATH.exists():
                 logger.info("データベースを新規作成します")
                 initialize_database(DB_PATH)
@@ -75,7 +77,6 @@ class MainWindow(QMainWindow):
     
     def setup_ui(self):
         """UIをセットアップ"""
-        # タブウィジェット
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
@@ -97,17 +98,22 @@ class MainWindow(QMainWindow):
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
         
-        # ユーザー情報を表示
         user_info = get_user_identifier()
         self.statusbar.showMessage(f"ログイン: {user_info}")
     
     def on_tab_changed(self, index: int):
         """タブが変更された時"""
-        # システム部管理タブに切り替わった場合はパスワード認証
         if index == 1:  # システム部管理タブ
-            if not self.authenticate_admin():
-                # 認証失敗したら訂正入力タブに戻す
+            if not self.is_authenticated:
+                # 訂正入力タブに戻す
+                self.tabs.blockSignals(True)
                 self.tabs.setCurrentIndex(0)
+                self.tabs.blockSignals(False)
+                
+                # 認証ダイアログを表示
+                if self.authenticate_admin():
+                    # 認証成功したらシステム部管理タブに遷移
+                    self.tabs.setCurrentIndex(1)
     
     def authenticate_admin(self) -> bool:
         """管理者認証"""
@@ -119,6 +125,7 @@ class MainWindow(QMainWindow):
             
             if self.auth_controller.verify_admin_password(password):
                 logger.info("管理者認証成功")
+                self.is_authenticated = True
                 self.statusbar.showMessage("管理者モード", 3000)
                 
                 # 管理タブのデータを更新

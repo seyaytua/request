@@ -29,12 +29,13 @@ class CorrectionTab(QWidget):
         """UIをセットアップ"""
         layout = QHBoxLayout()
         
-        # スプリッター（左65%、右35%）
         splitter = QSplitter(Qt.Horizontal)
         
         # 左側: 訂正依頼リスト
         self.list_widget = CorrectionListWidget()
         self.list_widget.refresh_requested.connect(self.refresh_list)
+        self.list_widget.edit_requested.connect(self.on_edit_correction)
+        self.list_widget.delete_requested.connect(self.on_delete_correction)
         
         # 右側: 訂正入力フォーム
         self.input_widget = CorrectionInputWidget()
@@ -43,7 +44,6 @@ class CorrectionTab(QWidget):
         splitter.addWidget(self.list_widget)
         splitter.addWidget(self.input_widget)
         
-        # 幅の比率を設定（65:35）
         splitter.setStretchFactor(0, 65)
         splitter.setStretchFactor(1, 35)
         
@@ -53,14 +53,12 @@ class CorrectionTab(QWidget):
     def load_data(self):
         """データをロード"""
         try:
-            # 生徒と講座をロード
             students = self.controller.get_students(year=2024)
             courses = self.controller.get_courses(year=2024)
             
             self.input_widget.set_students(students)
             self.input_widget.set_courses(courses)
             
-            # 訂正依頼リストをロード
             self.refresh_list()
             
             logger.info("データをロードしました")
@@ -83,17 +81,15 @@ class CorrectionTab(QWidget):
                 f"訂正依頼リストの更新に失敗しました:\n{e}")
     
     def on_submit_corrections(self, corrections: list):
-        """訂正依頼を送信（確認ダイアログを順次表示）"""
+        """訂正依頼を送信"""
         success_count = 0
         
         for i, correction_data in enumerate(corrections):
-            # 確認ダイアログ表示
             dialog = ConfirmationDialog(correction_data, self)
             result = dialog.exec()
             
             if result == ConfirmationDialog.Accepted:
                 try:
-                    # データベースに保存
                     correction_id = self.controller.create_correction(correction_data)
                     success_count += 1
                     logger.info(f"訂正依頼を登録しました: ID={correction_id}")
@@ -104,7 +100,6 @@ class CorrectionTab(QWidget):
                         f"訂正依頼の登録に失敗しました:\n{e}")
                     break
             else:
-                # キャンセルされた場合
                 remaining = len(corrections) - i
                 if remaining > 1:
                     reply = QMessageBox.question(
@@ -117,15 +112,51 @@ class CorrectionTab(QWidget):
                 else:
                     break
         
-        # 完了メッセージ
         if success_count > 0:
             QMessageBox.information(
                 self, "完了", 
                 f"{success_count}件の訂正依頼を登録しました"
             )
             
-            # リストを更新
             self.refresh_list()
-            
-            # フォームをクリア
             self.input_widget.clear_all()
+    
+    def on_edit_correction(self, correction_id: int):
+        """訂正依頼を編集"""
+        try:
+            correction = self.controller.get_correction(correction_id)
+            if not correction:
+                QMessageBox.warning(self, "エラー", "訂正依頼が見つかりません")
+                return
+            
+            # TODO: 編集ダイアログを実装
+            QMessageBox.information(self, "編集", 
+                f"訂正依頼 ID:{correction_id} の編集機能は今後実装予定です")
+            
+        except Exception as e:
+            logger.error(f"訂正依頼の編集に失敗: {e}")
+            QMessageBox.critical(self, "エラー", 
+                f"訂正依頼の編集に失敗しました:\n{e}")
+    
+    def on_delete_correction(self, correction_id: int):
+        """訂正依頼を削除"""
+        reply = QMessageBox.question(
+            self, "確認", 
+            f"訂正依頼 ID:{correction_id} を削除しますか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                success = self.controller.delete_correction(correction_id)
+                
+                if success:
+                    QMessageBox.information(self, "完了", "訂正依頼を削除しました")
+                    self.refresh_list()
+                else:
+                    QMessageBox.warning(self, "失敗", "訂正依頼の削除に失敗しました")
+                    
+            except Exception as e:
+                logger.error(f"訂正依頼の削除に失敗: {e}")
+                QMessageBox.critical(self, "エラー", 
+                    f"訂正依頼の削除に失敗しました:\n{e}")
