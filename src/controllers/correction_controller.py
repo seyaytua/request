@@ -39,22 +39,23 @@ class CorrectionController:
                 - course_id: 講座ID
                 - target_date: 対象日付（出欠訂正の場合）
                 - semester: 学期（評価評定変更の場合）
+                - periods: 校時（出欠訂正の場合、カンマ区切り）
                 - before_value: 訂正前
                 - after_value: 訂正後
                 - reason: 理由
+                - requester: 依頼者
                 
         Returns:
             作成された訂正依頼ID
         """
-        username = get_username()
         pc_name = get_pc_name()
         
         correction_id = self.db.execute_insert(
             """
             INSERT INTO correction_requests
-            (request_type, student_id, course_id, target_date, semester,
+            (request_type, student_id, course_id, target_date, semester, periods,
              before_value, after_value, reason, requester_name, requester_pc)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 correction_data['request_type'],
@@ -62,10 +63,11 @@ class CorrectionController:
                 correction_data['course_id'],
                 correction_data.get('target_date'),
                 correction_data.get('semester'),
+                correction_data.get('periods'),
                 correction_data.get('before_value'),
                 correction_data['after_value'],
                 correction_data['reason'],
-                username,
+                correction_data['requester'],
                 pc_name
             )
         )
@@ -76,7 +78,7 @@ class CorrectionController:
             target_table='correction_requests',
             target_record_id=correction_id,
             after_data=correction_data,
-            detail=f"訂正依頼を作成: {correction_data['request_type']}"
+            detail=f"訂正依頼を作成: {correction_data['request_type']} by {correction_data['requester']}"
         )
         
         logger.info(f"訂正依頼を作成しました: ID={correction_id}")
@@ -94,7 +96,7 @@ class CorrectionController:
         """
         rows = self.db.execute_query(
             """
-            SELECT cr.*, s.name as student_name, c.course_name
+            SELECT cr.*, s.name as student_name, s.class_number, c.course_name
             FROM correction_requests cr
             LEFT JOIN students s ON cr.student_id = s.student_id
             LEFT JOIN courses c ON cr.course_id = c.course_id
@@ -168,23 +170,20 @@ class CorrectionController:
         Returns:
             更新成功したらTrue
         """
-        # 現在のデータを取得（ログ用）
         before_data = self.get_correction(correction_id)
         if not before_data:
             logger.error(f"訂正依頼が見つかりません: ID={correction_id}")
             return False
         
-        # ロックチェック
         if before_data['is_locked']:
             logger.warning(f"ロックされた訂正依頼は更新できません: ID={correction_id}")
             return False
         
-        # 更新クエリを動的に構築
         set_clauses = []
         params = []
         
         for key, value in update_data.items():
-            if key in ['request_type', 'target_date', 'semester', 
+            if key in ['request_type', 'target_date', 'semester', 'periods',
                       'before_value', 'after_value', 'reason', 'status']:
                 set_clauses.append(f"{key} = ?")
                 params.append(value)
@@ -205,7 +204,6 @@ class CorrectionController:
         affected = self.db.execute_update(query, tuple(params))
         
         if affected > 0:
-            # ログ記録
             self.log_controller.log_operation(
                 operation_type='更新',
                 target_table='correction_requests',
@@ -229,13 +227,11 @@ class CorrectionController:
         Returns:
             削除成功したらTrue
         """
-        # 現在のデータを取得（ログ用）
         before_data = self.get_correction(correction_id)
         if not before_data:
             logger.error(f"訂正依頼が見つかりません: ID={correction_id}")
             return False
         
-        # ロックチェック
         if before_data['is_locked']:
             logger.warning(f"ロックされた訂正依頼は削除できません: ID={correction_id}")
             return False
@@ -250,7 +246,6 @@ class CorrectionController:
         )
         
         if affected > 0:
-            # ログ記録
             self.log_controller.log_operation(
                 operation_type='削除',
                 target_table='correction_requests',
@@ -286,7 +281,6 @@ class CorrectionController:
         )
         
         if affected > 0:
-            # ログ記録
             self.log_controller.log_operation(
                 operation_type='ロック',
                 target_table='correction_requests',
@@ -321,7 +315,6 @@ class CorrectionController:
         )
         
         if affected > 0:
-            # ログ記録
             self.log_controller.log_operation(
                 operation_type='ロック解除',
                 target_table='correction_requests',

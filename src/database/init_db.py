@@ -19,28 +19,22 @@ def initialize_database(db_path: Path = DB_PATH, force: bool = False):
         db_path: データベースファイルのパス
         force: 既存のDBを削除して再作成するか
     """
-    # 強制再作成の場合は既存ファイルを削除
     if force and db_path.exists():
         db_path.unlink()
         logger.warning(f"既存のデータベースを削除しました: {db_path}")
     
-    # スキーマファイルのパス
     schema_path = Path(__file__).parent / "schema.sql"
     
-    # スキーマファイルを読み込み
     with open(schema_path, 'r', encoding='utf-8') as f:
         schema_sql = f.read()
     
-    # データベースマネージャー作成
     db = DatabaseManager(db_path)
     
-    # スキーマ実行（複数のSQL文を分割して実行）
     with db.get_connection() as conn:
         conn.executescript(schema_sql)
     
     logger.info("データベーススキーマを作成しました")
     
-    # 初期データ投入
     _insert_initial_data(db)
     
     logger.info(f"データベース初期化完了: {db_path}")
@@ -49,8 +43,6 @@ def initialize_database(db_path: Path = DB_PATH, force: bool = False):
 
 def _insert_initial_data(db: DatabaseManager):
     """初期データを投入"""
-    
-    # システム設定: 管理者パスワード
     admin_password_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
     
     try:
@@ -63,22 +55,19 @@ def _insert_initial_data(db: DatabaseManager):
         )
         logger.info(f"初期管理者パスワードを設定しました（パスワード: {DEFAULT_ADMIN_PASSWORD}）")
     except Exception as e:
-        # 既に存在する場合はスキップ
         logger.debug(f"初期データは既に存在します: {e}")
     
-    # サンプルデータ（開発用）
     _insert_sample_data(db)
 
 
 def _insert_sample_data(db: DatabaseManager):
     """サンプルデータを投入（開発・テスト用）"""
-    
     try:
-        # サンプル生徒データ
+        # サンプル生徒データ（組番号を5文字に変更）
         sample_students = [
-            (2024, "1-A", "01", "山田太郎", "やまだたろう"),
-            (2024, "1-A", "02", "佐藤花子", "さとうはなこ"),
-            (2024, "1-B", "01", "鈴木一郎", "すずきいちろう"),
+            (2024, "F1221", "01", "山田太郎", "やまだたろう"),
+            (2024, "F1221", "02", "佐藤花子", "さとうはなこ"),
+            (2024, "J2123", "01", "鈴木一郎", "すずきいちろう"),
         ]
         
         for student in sample_students:
@@ -91,11 +80,11 @@ def _insert_sample_data(db: DatabaseManager):
                 student
             )
         
-        # サンプル講座データ
+        # サンプル講座データ（学期を文字列に変更）
         sample_courses = [
-            ("2024-MATH-01", "数学I", "田中先生", 2024, 1, "MATH"),
-            ("2024-ENG-01", "英語I", "佐々木先生", 2024, 1, "ENG"),
-            ("2024-SCI-01", "理科I", "高橋先生", 2024, 1, "SCI"),
+            ("2024-MATH-01", "数学I", "田中先生", 2024, "前期中間", "MATH"),
+            ("2024-ENG-01", "英語I", "佐々木先生", 2024, "前期期末", "ENG"),
+            ("2024-SCI-01", "理科I", "高橋先生", 2024, "後期中間", "SCI"),
         ]
         
         for course in sample_courses:
@@ -114,17 +103,12 @@ def _insert_sample_data(db: DatabaseManager):
         logger.warning(f"サンプルデータの投入に失敗しました: {e}")
 
 
-# テスト用
 if __name__ == "__main__":
     from ..config import DATA_DIR
     
-    # テスト用DBパス
     test_db = DATA_DIR / "test_init.db"
-    
-    # 初期化実行
     db = initialize_database(test_db, force=True)
     
-    # 確認
     students = db.execute_query("SELECT * FROM students")
     courses = db.execute_query("SELECT * FROM courses")
     settings = db.execute_query("SELECT * FROM system_settings")

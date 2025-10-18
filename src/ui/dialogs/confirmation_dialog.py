@@ -1,77 +1,89 @@
 """
 確認ダイアログ
-訂正依頼の内容を確認してから登録
+訂正依頼の内容を確認して登録
 """
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QGroupBox, QFormLayout, QDialogButtonBox
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
+    QLabel, QTextEdit
 )
 from PySide6.QtCore import Qt
 from typing import Dict, Any
 
+from ...config import COLOR_ATTENDANCE, COLOR_GRADE
+
 
 class ConfirmationDialog(QDialog):
-    """訂正内容確認ダイアログ"""
+    """確認ダイアログ"""
     
     def __init__(self, correction_data: Dict[str, Any], parent=None):
         super().__init__(parent)
         self.correction_data = correction_data
-        self.setWindowTitle("訂正内容の確認")
-        self.setModal(True)
+        self.setWindowTitle("訂正依頼の確認")
+        self.resize(500, 400)
         self.setup_ui()
-        
+    
     def setup_ui(self):
         """UIをセットアップ"""
         layout = QVBoxLayout()
         
+        # 背景色設定
+        if self.correction_data['request_type'] == '出欠訂正':
+            bg_color = COLOR_ATTENDANCE
+        else:
+            bg_color = COLOR_GRADE
+        
+        self.setStyleSheet(f"QDialog {{ background-color: {bg_color}; }}")
+        
         # タイトル
-        title = QLabel("以下の内容で訂正依頼を登録します。よろしいですか？")
-        title.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        title = QLabel(f"【{self.correction_data['request_type']}】")
+        title.setStyleSheet("font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
         
-        # 訂正内容表示
-        info_group = QGroupBox("訂正内容")
-        form_layout = QFormLayout()
-        
-        form_layout.addRow("依頼種別:", 
-            QLabel(self.correction_data.get('request_type', '')))
-        form_layout.addRow("生徒名:", 
-            QLabel(self.correction_data.get('student_name', '')))
-        form_layout.addRow("講座名:", 
-            QLabel(self.correction_data.get('course_name', '')))
-        
-        # 出欠訂正の場合は対象日付を表示
-        if self.correction_data.get('target_date'):
-            form_layout.addRow("対象日付:", 
-                QLabel(self.correction_data['target_date']))
-        
-        # 評価評定変更の場合は学期を表示
-        if self.correction_data.get('semester'):
-            form_layout.addRow("学期:", 
-                QLabel(str(self.correction_data['semester'])))
-        
-        if self.correction_data.get('before_value'):
-            form_layout.addRow("訂正前:", 
-                QLabel(self.correction_data['before_value']))
-        
-        form_layout.addRow("訂正後:", 
-            QLabel(self.correction_data.get('after_value', '')))
-        form_layout.addRow("理由:", 
-            QLabel(self.correction_data.get('reason', '')))
-        
-        info_group.setLayout(form_layout)
-        layout.addWidget(info_group)
+        # 内容表示
+        content = self._format_content()
+        content_edit = QTextEdit()
+        content_edit.setPlainText(content)
+        content_edit.setReadOnly(True)
+        layout.addWidget(content_edit)
         
         # ボタン
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
-        button_box.button(QDialogButtonBox.Ok).setText("登録")
-        button_box.button(QDialogButtonBox.Cancel).setText("キャンセル")
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
+        button_layout = QHBoxLayout()
         
-        layout.addWidget(button_box)
+        ok_btn = QPushButton("登録")
+        ok_btn.clicked.connect(self.accept)
+        ok_btn.setStyleSheet("font-size: 14px; padding: 10px;")
         
+        cancel_btn = QPushButton("キャンセル")
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setStyleSheet("font-size: 14px; padding: 10px;")
+        
+        button_layout.addWidget(ok_btn)
+        button_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(button_layout)
         self.setLayout(layout)
-        self.setMinimumWidth(400)
+    
+    def _format_content(self) -> str:
+        """内容をフォーマット"""
+        lines = []
+        lines.append(f"訂正種別: {self.correction_data['request_type']}")
+        lines.append(f"依頼者: {self.correction_data['requester']}")
+        lines.append("")
+        
+        if self.correction_data['request_type'] == '出欠訂正':
+            lines.append(f"対象日付: {self.correction_data.get('target_date', '')}")
+            periods = self.correction_data.get('periods', '').split(',')
+            period_text = '、'.join([f"{p}限" for p in periods])
+            lines.append(f"校時: {period_text}")
+            lines.append(f"訂正前: {self.correction_data.get('before_value', '')}")
+            lines.append(f"訂正後: {self.correction_data['after_value']}")
+        else:
+            lines.append(f"学期: {self.correction_data.get('semester', '')}")
+            lines.append(f"訂正前: {self.correction_data.get('before_value', '')}")
+            lines.append(f"訂正後: {self.correction_data['after_value']}")
+        
+        lines.append("")
+        lines.append("理由:")
+        lines.append(self.correction_data['reason'])
+        
+        return '\n'.join(lines)
