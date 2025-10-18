@@ -1,0 +1,77 @@
+name: Build Windows Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build executable
+      run: pyinstaller --clean --onefile --windowed --name=CorrectionRequestSystem main.py
+    
+    - name: Rename executable
+      run: |
+        mkdir portable
+        copy dist\CorrectionRequestSystem.exe portable\訂正依頼システム.exe
+        mkdir portable\data
+      shell: cmd
+    
+    - name: Create README
+      run: |
+        echo 訂正依頼システム v${{ github.ref_name }} > portable\README.txt
+        echo. >> portable\README.txt
+        echo 使い方: >> portable\README.txt
+        echo 1. 訂正依頼システム.exe をダブルクリックで起動 >> portable\README.txt
+        echo 2. 初回起動時に data フォルダにデータベースが自動作成されます >> portable\README.txt
+        echo 3. 管理者パスワード: admin123 >> portable\README.txt
+      shell: cmd
+        
+    - name: Create ZIP
+      run: Compress-Archive -Path portable\* -DestinationPath CorrectionRequestSystem-${{ github.ref_name }}-Windows.zip
+      shell: pwsh
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CorrectionRequestSystem-${{ github.ref_name }}
+        path: portable/
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: CorrectionRequestSystem-${{ github.ref_name }}-Windows.zip
+        body: |
+          ## 訂正依頼システム ${{ github.ref_name }}
+          
+          ### ダウンロード
+          `CorrectionRequestSystem-${{ github.ref_name }}-Windows.zip`
+          
+          ### インストール
+          1. ZIPをダウンロード
+          2. 解凍
+          3. 訂正依頼システム.exe を起動
+          
+          ### 初期パスワード
+          admin123
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
