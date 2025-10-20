@@ -1,5 +1,5 @@
 """
-システム部管理タブ v1.4.0
+システム部管理タブ v1.5.5
 """
 import csv
 from pathlib import Path
@@ -7,13 +7,14 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QAbstractItemView, QMessageBox, QGroupBox, QFileDialog,
-    QTabWidget
+    QTabWidget, QProgressDialog, QApplication
 )
 from PySide6.QtCore import Qt
 
 from ..controllers.correction_controller import CorrectionController
 from ..controllers.log_controller import LogController
 from ..controllers.master_controller import MasterController
+from ..utils.backup_manager import BackupManager
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,12 +28,14 @@ class AdminTab(QWidget):
         correction_controller: CorrectionController,
         log_controller: LogController,
         master_controller: MasterController,
+        backup_manager: BackupManager,
         parent=None
     ):
         super().__init__(parent)
         self.correction_controller = correction_controller
         self.log_controller = log_controller
         self.master_controller = master_controller
+        self.backup_manager = backup_manager
         self.setup_ui()
         
     def setup_ui(self):
@@ -57,6 +60,10 @@ class AdminTab(QWidget):
         # 操作ログタブ
         log_widget = self._create_log_tab()
         self.tabs.addTab(log_widget, "📊 操作ログ")
+        
+        # バックアップ管理タブ
+        backup_widget = self._create_backup_tab()
+        self.tabs.addTab(backup_widget, "💾 バックアップ管理")
         
         layout.addWidget(self.tabs)
         self.setLayout(layout)
@@ -381,6 +388,12 @@ class AdminTab(QWidget):
                 
                 if success:
                     QMessageBox.information(self, "完了", "訂正依頼をロックしました")
+                    self.log_controller.log_operation(
+                        operation_type='ロック',
+                        target_table='correction_requests',
+                        target_record_id=correction_id,
+                        detail=f'訂正依頼をロック（システム部管理）'
+                    )
                     self.refresh_correction_list()
                 else:
                     QMessageBox.warning(self, "失敗", "ロックに失敗しました")
@@ -412,6 +425,12 @@ class AdminTab(QWidget):
                 
                 if success:
                     QMessageBox.information(self, "完了", "ロックを解除しました")
+                    self.log_controller.log_operation(
+                        operation_type='ロック解除',
+                        target_table='correction_requests',
+                        target_record_id=correction_id,
+                        detail=f'訂正依頼のロック解除（システム部管理）'
+                    )
                     self.refresh_correction_list()
                 else:
                     QMessageBox.warning(self, "失敗", "ロックの解除に失敗しました")
@@ -469,6 +488,11 @@ class AdminTab(QWidget):
             QMessageBox.information(self, "完了", 
                 f"{len(corrections)}件のデータをエクスポートしました\n{file_path}")
             logger.info(f"CSVエクスポート完了: {file_path}")
+            self.log_controller.log_operation(
+                operation_type='エクスポート',
+                target_table='correction_requests',
+                detail=f'{len(corrections)}件の訂正依頼をCSVエクスポート'
+            )
             
         except Exception as e:
             logger.error(f"CSVエクスポートに失敗: {e}")
@@ -506,15 +530,35 @@ class AdminTab(QWidget):
                 self.correction_controller.db.execute_update(
                     "DELETE FROM correction_requests"
                 )
+                self.log_controller.log_operation(
+                    operation_type='削除',
+                    target_table='correction_requests',
+                    detail='全訂正依頼を削除（CSVインポート）'
+                )
                 self.refresh_correction_list()
                 return
+            
+            # プログレスダイアログを表示
+            progress = QProgressDialog("訂正依頼を書き込み中...", "キャンセル", 0, len(rows), self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowTitle("インポート中")
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
             
             self.correction_controller.db.execute_update(
                 "DELETE FROM correction_requests"
             )
+            self.log_controller.log_operation(
+                operation_type='削除',
+                target_table='correction_requests',
+                detail='全訂正依頼を削除（CSVインポート）'
+            )
             
             success_count = 0
-            for row in rows:
+            for i, row in enumerate(rows):
+                if progress.wasCanceled():
+                    break
+                
                 try:
                     correction_data = {
                         'request_type': row['種別'],
@@ -535,10 +579,21 @@ class AdminTab(QWidget):
                 except Exception as e:
                     logger.warning(f"行のインポートに失敗: {e}")
                     continue
+                
+                progress.setValue(i + 1)
+                QApplication.processEvents()
+            
+            progress.close()
             
             QMessageBox.information(self, "完了", 
                 f"{success_count}件のデータをインポートしました")
             logger.info(f"CSVインポート完了: {success_count}件")
+            
+            self.log_controller.log_operation(
+                operation_type='インポート',
+                target_table='correction_requests',
+                detail=f'{success_count}件の訂正依頼をインポート'
+            )
             
             self.refresh_correction_list()
             
@@ -576,6 +631,11 @@ class AdminTab(QWidget):
             QMessageBox.information(self, "完了", 
                 f"{len(students)}件のデータをエクスポートしました\n{file_path}")
             logger.info(f"生徒情報CSVエクスポート完了: {file_path}")
+            self.log_controller.log_operation(
+                operation_type='エクスポート',
+                target_table='students',
+                detail=f'{len(students)}件の生徒情報をCSVエクスポート'
+            )
             
         except Exception as e:
             logger.error(f"生徒情報CSVエクスポートに失敗: {e}")
@@ -611,13 +671,33 @@ class AdminTab(QWidget):
                 QMessageBox.information(self, "完了", 
                     "データ件数: 0件\n（タイトル行のみのため、データは削除されました）")
                 self.master_controller.db.execute_update("DELETE FROM students")
+                self.log_controller.log_operation(
+                    operation_type='削除',
+                    target_table='students',
+                    detail='全生徒情報を削除（CSVインポート）'
+                )
                 self.refresh_student_list()
                 return
             
+            # プログレスダイアログを表示
+            progress = QProgressDialog("生徒情報を書き込み中...", "キャンセル", 0, len(rows), self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowTitle("インポート中")
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
+            
             self.master_controller.db.execute_update("DELETE FROM students")
+            self.log_controller.log_operation(
+                operation_type='削除',
+                target_table='students',
+                detail='全生徒情報を削除（CSVインポート）'
+            )
             
             success_count = 0
-            for row in rows:
+            for i, row in enumerate(rows):
+                if progress.wasCanceled():
+                    break
+                
                 try:
                     student_data = {
                         'year': int(row['年度']),
@@ -633,10 +713,21 @@ class AdminTab(QWidget):
                 except Exception as e:
                     logger.warning(f"行のインポートに失敗: {e}")
                     continue
+                
+                progress.setValue(i + 1)
+                QApplication.processEvents()
+            
+            progress.close()
             
             QMessageBox.information(self, "完了", 
                 f"{success_count}件のデータをインポートしました")
             logger.info(f"生徒情報CSVインポート完了: {success_count}件")
+            
+            self.log_controller.log_operation(
+                operation_type='インポート',
+                target_table='students',
+                detail=f'{success_count}件の生徒情報をインポート'
+            )
             
             self.refresh_student_list()
             
@@ -660,11 +751,12 @@ class AdminTab(QWidget):
             with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 
-                writer.writerow(['講座ID', '講座名', '担当教員', '年度', '学期', '科目コード'])
+                # 講座IDは除外してエクスポート（年度と科目コードから自動生成できるため）
+                writer.writerow(['講座名', '担当教員', '年度', '学期', '科目コード'])
                 
                 for c in courses:
+                    # 講座IDは除外してエクスポート
                     writer.writerow([
-                        c['course_id'],
                         c['course_name'],
                         c.get('teacher_name', ''),
                         c['year'],
@@ -675,6 +767,11 @@ class AdminTab(QWidget):
             QMessageBox.information(self, "完了", 
                 f"{len(courses)}件のデータをエクスポートしました\n{file_path}")
             logger.info(f"講座情報CSVエクスポート完了: {file_path}")
+            self.log_controller.log_operation(
+                operation_type='エクスポート',
+                target_table='courses',
+                detail=f'{len(courses)}件の講座情報をCSVエクスポート'
+            )
             
         except Exception as e:
             logger.error(f"講座情報CSVエクスポートに失敗: {e}")
@@ -710,21 +807,43 @@ class AdminTab(QWidget):
                 QMessageBox.information(self, "完了", 
                     "データ件数: 0件\n（タイトル行のみのため、データは削除されました）")
                 self.master_controller.db.execute_update("DELETE FROM courses")
+                self.log_controller.log_operation(
+                    operation_type='削除',
+                    target_table='courses',
+                    detail='全講座情報を削除（CSVインポート）'
+                )
                 self.refresh_course_list()
                 return
             
+            # プログレスダイアログを表示
+            progress = QProgressDialog("講座情報を書き込み中...", "キャンセル", 0, len(rows), self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowTitle("インポート中")
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
+            
             self.master_controller.db.execute_update("DELETE FROM courses")
+            self.log_controller.log_operation(
+                operation_type='削除',
+                target_table='courses',
+                detail='全講座情報を削除（CSVインポート）'
+            )
             
             success_count = 0
-            for row in rows:
+            for i, row in enumerate(rows):
+                if progress.wasCanceled():
+                    break
+                
                 try:
+                    # 講座IDはB列（講座名）とC列（年度）から自動生成
+                    # 実際はF列（科目コード）が講座番号として使用される
                     course_data = {
-                        'course_id': row['講座ID'],
                         'course_name': row['講座名'],
                         'teacher_name': row.get('担当教員', ''),
                         'year': int(row['年度']),
                         'semester': row.get('学期', ''),
-                        'subject_code': row.get('科目コード', '')
+                        'subject_code': row.get('科目コード', ''),
+                        'course_number': row.get('科目コード', '')  # 科目コードを講座番号として使用
                     }
                     
                     self.master_controller.create_course(course_data)
@@ -733,10 +852,21 @@ class AdminTab(QWidget):
                 except Exception as e:
                     logger.warning(f"行のインポートに失敗: {e}")
                     continue
+                
+                progress.setValue(i + 1)
+                QApplication.processEvents()
+            
+            progress.close()
             
             QMessageBox.information(self, "完了", 
                 f"{success_count}件のデータをインポートしました")
             logger.info(f"講座情報CSVインポート完了: {success_count}件")
+            
+            self.log_controller.log_operation(
+                operation_type='インポート',
+                target_table='courses',
+                detail=f'{success_count}件の講座情報をインポート'
+            )
             
             self.refresh_course_list()
             
@@ -776,6 +906,11 @@ class AdminTab(QWidget):
             QMessageBox.information(self, "完了", 
                 f"{len(logs)}件のデータをエクスポートしました\n{file_path}")
             logger.info(f"操作ログCSVエクスポート完了: {file_path}")
+            self.log_controller.log_operation(
+                operation_type='エクスポート',
+                target_table='operation_logs',
+                detail=f'{len(logs)}件の操作ログをCSVエクスポート'
+            )
             
         except Exception as e:
             logger.error(f"操作ログCSVエクスポートに失敗: {e}")
@@ -812,3 +947,129 @@ class AdminTab(QWidget):
             logger.error(f"ログの更新に失敗: {e}")
             QMessageBox.critical(self, "エラー", 
                 f"ログの更新に失敗しました:\n{e}")
+    
+    def _create_backup_tab(self):
+        """バックアップ管理タブを作成"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # バックアップ操作エリア
+        operation_group = QGroupBox("バックアップ操作")
+        operation_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("🔄 更新")
+        refresh_btn.clicked.connect(self.refresh_backup_list)
+        operation_layout.addWidget(refresh_btn)
+        
+        restore_btn = QPushButton("📥 選択したバックアップを読み込む")
+        restore_btn.clicked.connect(self.restore_selected_backup)
+        operation_layout.addWidget(restore_btn)
+        
+        operation_layout.addStretch()
+        operation_group.setLayout(operation_layout)
+        layout.addWidget(operation_group)
+        
+        # バックアップリスト
+        backup_list_group = QGroupBox("バックアップ一覧")
+        backup_list_layout = QVBoxLayout()
+        
+        self.backup_table = QTableWidget()
+        self.backup_table.setColumnCount(4)
+        self.backup_table.setHorizontalHeaderLabels([
+            "ファイル名", "作成日時", "サイズ", "パス"
+        ])
+        self.backup_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.backup_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        
+        header = self.backup_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        
+        backup_list_layout.addWidget(self.backup_table)
+        backup_list_group.setLayout(backup_list_layout)
+        layout.addWidget(backup_list_group)
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def refresh_backup_list(self):
+        """バックアップリストを更新"""
+        try:
+            backups = self.backup_manager.get_backup_list()
+            
+            self.backup_table.setRowCount(0)
+            
+            for backup in backups:
+                row = self.backup_table.rowCount()
+                self.backup_table.insertRow(row)
+                
+                stat = backup.stat()
+                size_mb = stat.st_size / (1024 * 1024)
+                
+                from datetime import datetime
+                mod_time = datetime.fromtimestamp(stat.st_mtime)
+                
+                self.backup_table.setItem(row, 0, 
+                    QTableWidgetItem(backup.name))
+                self.backup_table.setItem(row, 1, 
+                    QTableWidgetItem(mod_time.strftime('%Y-%m-%d %H:%M:%S')))
+                self.backup_table.setItem(row, 2, 
+                    QTableWidgetItem(f"{size_mb:.2f} MB"))
+                self.backup_table.setItem(row, 3, 
+                    QTableWidgetItem(str(backup)))
+            
+            logger.info(f"{len(backups)}件のバックアップをロードしました")
+            self.log_controller.log_operation(
+                operation_type='表示',
+                target_table='backups',
+                detail=f'バックアップ一覧を表示（{len(backups)}件）'
+            )
+            
+        except Exception as e:
+            logger.error(f"バックアップリストの更新に失敗: {e}")
+            QMessageBox.critical(self, "エラー", 
+                f"バックアップリストの更新に失敗しました:\n{e}")
+    
+    def restore_selected_backup(self):
+        """選択されたバックアップを復元"""
+        selected_items = self.backup_table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "警告", "復元するバックアップを選択してください")
+            return
+        
+        row = selected_items[0].row()
+        backup_path_str = self.backup_table.item(row, 3).text()
+        backup_name = self.backup_table.item(row, 0).text()
+        
+        reply = QMessageBox.warning(
+            self, "確認", 
+            f"バックアップ '{backup_name}' を読み込みますか？\n\n"
+            f"現在のデータベースは緊急バックアップとして保存されます。\n"
+            f"この操作は慎重に行ってください。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            backup_path = Path(backup_path_str)
+            success = self.backup_manager.restore_backup(backup_path)
+            
+            if success:
+                QMessageBox.information(self, "完了", 
+                    f"バックアップを読み込みました: {backup_name}\n\n"
+                    f"アプリケーションを再起動してください。")
+                logger.info(f"バックアップを復元: {backup_name}")
+                self.log_controller.log_operation(
+                    operation_type='復元',
+                    target_table='database',
+                    detail=f'バックアップから復元: {backup_name}'
+                )
+            else:
+                QMessageBox.warning(self, "失敗", "バックアップの読み込みに失敗しました")
+        
+        except Exception as e:
+            logger.error(f"バックアップ復元に失敗: {e}")
+            QMessageBox.critical(self, "エラー", 
+                f"バックアップ復元に失敗しました:\n{e}")

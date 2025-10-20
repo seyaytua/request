@@ -106,7 +106,8 @@ class MainWindow(QMainWindow):
         self.admin_tab = AdminTab(
             self.correction_controller,
             self.log_controller,
-            self.master_controller
+            self.master_controller,
+            self.backup_manager
         )
         self.tabs.addTab(self.admin_tab, "🔧 システム部管理")
         
