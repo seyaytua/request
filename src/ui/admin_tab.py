@@ -162,7 +162,7 @@ class AdminTab(QWidget):
         self.student_table = QTableWidget()
         self.student_table.setColumnCount(6)
         self.student_table.setHorizontalHeaderLabels([
-            "ID", "年度", "組番号", "出席番号", "氏名", "氏名カナ"
+            "ID", "年度", "組番号", "出席番号", "氏名", "ふりがな"
         ])
         self.student_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.student_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -617,7 +617,7 @@ class AdminTab(QWidget):
             with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 
-                writer.writerow(['年度', '組番号', '出席番号', '氏名', '氏名カナ'])
+                writer.writerow(['年度', '組番号', '出席番号', '氏名', 'ふりがな'])
                 
                 for s in students:
                     writer.writerow([
@@ -704,7 +704,7 @@ class AdminTab(QWidget):
                         'class_number': row['組番号'],
                         'student_number': row.get('出席番号', ''),
                         'name': row['氏名'],
-                        'name_kana': row.get('氏名カナ', '')
+                        'name_kana': row.get('ふりがな', '')
                     }
                     
                     self.master_controller.create_student(student_data)
