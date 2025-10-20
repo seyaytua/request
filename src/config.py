@@ -1,12 +1,12 @@
 """
-設定ファイル v1.5.0
+設定ファイル v1.5.5
 """
 import os
 import sys
 from pathlib import Path
 
 APP_NAME = "訂正依頼システム"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.5"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys._MEIPASS)
