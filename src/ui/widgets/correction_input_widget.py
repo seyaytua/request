@@ -1,14 +1,14 @@
 """
-訂正入力ウィジェット
+訂正入力ウィジェット v1.5.6
 複数の入力フォームを管理
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QScrollArea, QMessageBox, QLabel, QRadioButton,
     QButtonGroup, QComboBox, QTextEdit, QDateEdit,
-    QGroupBox, QCheckBox
+    QGroupBox, QCheckBox, QCompleter
 )
-from PySide6.QtCore import Qt, Signal, QDate
+from PySide6.QtCore import Qt, Signal, QDate, QSortFilterProxyModel, QStringListModel
 from typing import List, Dict, Any
 
 from ...config import (
@@ -76,6 +76,11 @@ class CorrectionFormWidget(QWidget):
         self.student_combo = QComboBox()
         self.student_combo.setEditable(True)
         self.student_combo.setInsertPolicy(QComboBox.NoInsert)
+        # オートコンプリート設定
+        self.student_completer = QCompleter()
+        self.student_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.student_completer.setFilterMode(Qt.MatchContains)
+        self.student_combo.setCompleter(self.student_completer)
         student_layout.addWidget(self.student_combo)
         layout.addLayout(student_layout)
         
@@ -85,6 +90,11 @@ class CorrectionFormWidget(QWidget):
         self.course_combo = QComboBox()
         self.course_combo.setEditable(True)
         self.course_combo.setInsertPolicy(QComboBox.NoInsert)
+        # オートコンプリート設定
+        self.course_completer = QCompleter()
+        self.course_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.course_completer.setFilterMode(Qt.MatchContains)
+        self.course_combo.setCompleter(self.course_completer)
         course_layout.addWidget(self.course_combo)
         layout.addLayout(course_layout)
         
@@ -198,9 +208,23 @@ class CorrectionFormWidget(QWidget):
         self.student_combo.clear()
         self.student_combo.addItem("", None)
         
+        # 検索用のリストを作成
+        student_list = []
+        
         for student in students:
-            display_text = f"{student['class_number']} {student['name']}"
+            # 表示形式: 組番号：氏名
+            display_text = f"{student['class_number']}：{student['name']}"
             self.student_combo.addItem(display_text, student['student_id'])
+            
+            # 検索用: 組番号、氏名、ふりがなを含む
+            student_list.append(display_text)
+            if student.get('name_kana'):
+                # ふりがなでも検索できるように追加
+                student_list.append(f"{student['class_number']}：{student.get('name_kana', '')}")
+        
+        # コンプリーターに設定
+        model = QStringListModel(student_list)
+        self.student_completer.setModel(model)
     
     def set_courses(self, courses: List[Dict[str, Any]]):
         """講座リストを設定"""
@@ -208,8 +232,16 @@ class CorrectionFormWidget(QWidget):
         self.course_combo.clear()
         self.course_combo.addItem("", None)
         
+        # 検索用のリストを作成
+        course_list = []
+        
         for course in courses:
             self.course_combo.addItem(course['course_name'], course['course_id'])
+            course_list.append(course['course_name'])
+        
+        # コンプリーターに設定
+        model = QStringListModel(course_list)
+        self.course_completer.setModel(model)
     
     def get_data(self) -> Dict[str, Any]:
         """入力データを取得"""

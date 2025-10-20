@@ -54,8 +54,8 @@ class CorrectionTab(QWidget):
     def load_data(self):
         """データをロード"""
         try:
-            students = self.controller.get_students(year=2024)
-            courses = self.controller.get_courses(year=2024)
+            students = self.controller.get_students()
+            courses = self.controller.get_courses()
             
             self.input_widget.set_students(students)
             self.input_widget.set_courses(courses)
