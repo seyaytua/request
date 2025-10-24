@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.7] - 2025-10-24
+
+### Changed
+- ✏️ 出欠訂正の選択肢を拡張
+  - 「出席」「欠席」「遅刻」「早退」「公欠」「カウントなし」「その他」の7種類に変更
+
 ## [1.5.6] - 2025-10-20
 
 ### Added
